@@ -48,11 +48,12 @@ class rangeRangeRateObsModel(observerBase):
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
         mu, CD_drag, J_2 = sp.symbols('mu CD_drag, J_2')
-        X_GS1, Y_GS1, Z_GS1 = sp.symbols('X_GS1 Y_GS1 Z_GS1')
-        X_GS2, Y_GS2, Z_GS2 = sp.symbols('X_GS2 Y_GS2 Z_GS2')
-        X_GS3, Y_GS3, Z_GS3 = sp.symbols('X_GS3 Y_GS3 Z_GS3')
+        x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
+        # X_GS1, Y_GS1, Z_GS1 = sp.symbols('X_GS1 Y_GS1 Z_GS1')
+        # X_GS2, Y_GS2, Z_GS2 = sp.symbols('X_GS2 Y_GS2 Z_GS2')
+        # X_GS3, Y_GS3, Z_GS3 = sp.symbols('X_GS3 Y_GS3 Z_GS3')
 
-        X_symb = [x, y, z, x_dot, y_dot, z_dot, mu, CD_drag, J_2, X_GS1, Y_GS1, Z_GS1, X_GS2, Y_GS2, Z_GS2, X_GS3, Y_GS3, Z_GS3]
+        X_symb = [x, y, z, x_dot, y_dot, z_dot, mu, CD_drag, J_2, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs]
         return X_symb
 
     ## -------------------------Public Interface--------------------------
@@ -99,30 +100,16 @@ class rangeRangeRateObsModel(observerBase):
             y_gs = y_gs3
             z_gs = z_gs3
 
-
-
-        # x = X[0]
-        # y = X[1]
-        # z = X[2]
-        # x_dot = X[3]
-        # y_dot = X[4]
-        # z_dot = X[5]
-        #
-        # theta_0 = self._params[0]
-        # theta_dot = self._params[1]
-        #
-        # GS_number = params
-        #
-        # GS_coord = self.getObserverCoordinates()
-        #
-        # x_gs = GS_coord[GS_number][0]
-        # y_gs = GS_coord[GS_number][1]
-        # z_gs = GS_coord[GS_number][2]
-        #
         theta = theta_dot * t + theta_0
 
-        G = np.array([self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot),
-                    self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)])
+        nmbrOfOutputs = self.getNmbrOutputs()
+
+        G = np.zeros(nmbrOfOutputs)
+        for i in range(0, nmbrOfOutputs):
+            G[i] = self._modelLambda[i](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+
+        # G = np.array([self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot),
+        #             self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)])
 
         return G
 
@@ -141,6 +128,7 @@ class rangeRangeRateObsModel(observerBase):
         y_dot = X[4]
         z_dot = X[5]
 
+        # CHANGE THIS PART FOR ADDING MORE STATES!!!
         x_gs1 = X[9]
         y_gs1 = X[10]
         z_gs1 = X[11]
@@ -150,49 +138,10 @@ class rangeRangeRateObsModel(observerBase):
         x_gs3 = X[15]
         y_gs3 = X[16]
         z_gs3 = X[17]
+        #-------------------------------------------
         theta_0 = self._params[0]
         theta_dot = self._params[1]
         GS_nmbr = params
-
-        if GS_nmbr == 0:
-            x_gs = x_gs1
-            y_gs = y_gs1
-            z_gs = z_gs1
-        elif GS_nmbr == 1:
-            x_gs = x_gs2
-            y_gs = y_gs2
-            z_gs = z_gs2
-        else : # GS_nmbr == 2
-            x_gs = x_gs3
-            y_gs = y_gs3
-            z_gs = z_gs3
-
-        # x = X[0]
-        # y = X[1]
-        # z = X[2]
-        # x_dot = X[3]
-        # y_dot = X[4]
-        # z_dot = X[5]
-        #
-        # theta_0 = self._params[0]
-        # theta_dot = self._params[1]
-        #
-        # GS_number = params
-        #
-        # GS_coord = self.getObserverCoordinates()
-        #
-        # x_gs = GS_coord[GS_number][0]
-        # y_gs = GS_coord[GS_number][1]
-        # z_gs = GS_coord[GS_number][2]
-
-        # theta = theta_dot * t + theta_0
-        #
-        # Htilde = np.zeros([2,6])
-        #
-        # for i in range(0, 2) :
-        #     for j in range(0, 6) :
-        #         Htilde[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
-
 
         theta = theta_dot * t + theta_0
 
@@ -306,11 +255,7 @@ class rangeRangeRateObsModel(observerBase):
 
     def _computeSymbolicJacobian(self):
         self._getObsModelDerivativesFromPosVel()
-
-
         self._getObsModelDerivativesFromGSpos()
-
-
 
         self._jacobianSymb = self._jacobianSymb_posVel
         self._jacobianLambda = self._jacobianLambda_posVel

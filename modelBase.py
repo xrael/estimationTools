@@ -31,14 +31,6 @@ class modelBase:
     _stateSymb = None
     ##------------------------------------------
 
-    # def __init__(self):
-    #     self._params = None
-    #     self._modelSymb = None
-    #     self._modelLambda = None
-    #     self._jacobianSymb = None
-    #     self._jacobianLambda = None
-    #     return
-
     def __init__(self, stateSymb, params):
         """
         Constructor.
@@ -151,16 +143,6 @@ class dynamicModelBase(modelBase):
         super(dynamicModelBase, self).__init__(stateSymb, params)
         return
 
-    # @classmethod
-    # def getDynModel(cls, params):
-    #     """
-    #     Factory method for the class.
-    #     :param params: Static parameters used by the model.
-    #     :return:
-    #     """
-    #     dynModel = cls.getModel(params)
-    #     return  dynModel
-
     def getNmbrOutputs(self):
         return self.getNmbrOfStates() # it's the same for a dynamical model!
 
@@ -221,18 +203,6 @@ class observerBase(modelBase):
         self._observerCoordinates = observerCoordinates
         return
 
-    # @classmethod
-    # def getObsModel(cls, params, observerCoordinates):
-    #     """
-    #     Factory method for the class
-    #     :param params: Static parameters used by the model.
-    #     :return:
-    #     """
-    #     obsModel = cls.getModel(params)
-    #     obsModel._nmbrCoordinates = observerCoordinates.shape[0]
-    #     obsModel._observerCoordinates = observerCoordinates
-    #     return  obsModel
-
     def getObserverCoordinates(self):
         """
         Returns the coordinates of the observers associated.
@@ -253,5 +223,3 @@ class observerBase(modelBase):
     """
     @abstractmethod
     def isObservable(self, X, t, params): pass
-
-

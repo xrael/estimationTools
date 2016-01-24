@@ -84,19 +84,11 @@ class zonalHarmonicsModel(dynamicModelBase):
         J = self._params[2]
         #-------------------------------------------
 
-
         nmbrOfStates = self.getNmbrOfStates()
 
         F = np.zeros(nmbrOfStates)
         for i in range(0, nmbrOfStates):
             F[i] = self._modelLambda[i](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J])
-
-        # F = np.array([x_dot,
-        #               y_dot,
-        #               z_dot,
-        #               self._modelLambda[0](x, y, z, mu, R_E, [J]),
-        #               self._modelLambda[1](x, y, z, mu, R_E, [J]),
-        #               self._modelLambda[2](x, y, z, mu, R_E, [J])])
 
         return F
 
@@ -172,8 +164,6 @@ class zonalHarmonicsModel(dynamicModelBase):
         dUy = sp.diff(U, y)
         dUz = sp.diff(U, z)
 
-        #self._modelSymb = [dUx, dUy, dUz]
-
         nmbrOfStates = self.getNmbrOfStates()
 
         self._modelSymb = []
@@ -191,12 +181,6 @@ class zonalHarmonicsModel(dynamicModelBase):
         for i in range(0, nmbrOfStates):
             self._modelLambda[i] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J]), self._modelSymb[i], "numpy")
 
-        #a1 = sp.lambdify((x, y, z, mu, R_E, [J]), self._modelSymb[0], "numpy")
-        #a2 = sp.lambdify((x, y, z, mu, R_E, [J]), self._modelSymb[1], "numpy")
-        #a3 = sp.lambdify((x, y, z, mu, R_E, [J]), self._modelSymb[2], "numpy")
-
-        #self._modelLambda = [a1, a2, a3]
-
         return self._modelSymb
 
 
@@ -208,12 +192,8 @@ class zonalHarmonicsModel(dynamicModelBase):
         """
         degree = self._params[2].size - 1
 
-        #acc = self._modelSymb
-
         x, y, z = sp.symbols('x, y, z')
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
-
-        #X = [x, y, z, x_dot, y_dot, z_dot]
 
         mu = sp.symbols('mu')
         R_E = sp.symbols('R_E')
@@ -224,8 +204,6 @@ class zonalHarmonicsModel(dynamicModelBase):
         F = [0 for i in range(0, nmbrOfStates)]
         dF = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
         A_lambda = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
-
-        #F = [x_dot, y_dot, z_dot, acc[0], acc[1], acc[2]]
 
         for i in range(0, nmbrOfStates) :
             F[i] = self._modelSymb[i]
@@ -305,14 +283,6 @@ class dragModel(dynamicModelBase):
         theta_dot = self._params[6]
         #-------------------------------------------
 
-        # F = np.array([x_dot,
-        #               y_dot,
-        #               z_dot,
-        #               self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[2](x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-        #              ])
-
         nmbrOfStates = self.getNmbrOfStates()
 
         F = np.zeros(nmbrOfStates)
@@ -346,19 +316,12 @@ class dragModel(dynamicModelBase):
         theta_dot = self._params[6]
         #-------------------------------------------
 
-        # A = np.zeros([6,6])
-        #
-        # for i in range(0,6):
-        #     for j in range(0,6):
-        #         A[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-
         nmbrOfStates = self.getNmbrOfStates()
         A = np.zeros([nmbrOfStates,nmbrOfStates])
 
         for i in range(0,nmbrOfStates):
             for j in range(0,nmbrOfStates):
                 A[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-
 
         return A
 
@@ -385,14 +348,6 @@ class dragModel(dynamicModelBase):
         drag_acc2 = aux * (y_dot - theta_dot * x)
         drag_acc3 = aux * (z_dot)
 
-        #self._modelSymb = [drag_acc1, drag_acc2, drag_acc3]
-
-        # a1 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[0], "numpy")
-        # a2 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[1], "numpy")
-        # a3 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[2], "numpy")
-        #
-        # self._modelLambda = [a1, a2, a3]
-
         nmbrOfStates = self.getNmbrOfStates()
 
         self._modelSymb = []
@@ -412,46 +367,24 @@ class dragModel(dynamicModelBase):
 
         return self._modelSymb
 
-
     def _computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
         :return:
         """
-        #acc = self._modelSymb
-
         x, y, z = sp.symbols('x y z')
-        #r = sp.sqrt(x**2 + y**2 + z**2)
 
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
         CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, \
         H_drag, theta_dot = sp.symbols('CD_drag A_drag mass_sat rho_0_drag r0_drag H_drag theta_dot')
 
-        #X = [x, y, z, x_dot, y_dot, z_dot]
-
-        # dF = [[0 for i in range(6)] for i in range(6)]
-        # A_lambda = [[0 for i in range(6)] for i in range(6)]
-        #
-        # F = [x_dot, y_dot, z_dot, acc[0], acc[1], acc[2]]
-        #
-        # for i in range(0, 6) :
-        #     for j in range(0, 6) :
-        #         dF[i][j] = sp.diff(F[i], X[j])
-        #         A_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), dF[i][j], "numpy")
-        #
-        # self._jacobianSymb = dF
-        # self._jacobianLambda = A_lambda
-
-
         nmbrOfStates = self.getNmbrOfStates()
 
         F = [0 for i in range(0, nmbrOfStates)]
         dF = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
         A_lambda = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
-
-        #F = [x_dot, y_dot, z_dot, acc[0], acc[1], acc[2]]
 
         for i in range(0, nmbrOfStates) :
             F[i] = self._modelSymb[i]
@@ -496,7 +429,6 @@ class dragZonalHarmonicModel(dynamicModelBase):
         symbState = dragZonalHarmonicModel.buildSymbolicState()
         zonHarmDragMod = dragZonalHarmonicModel(symbState, params)
 
-        #zonHarmDragMod._getAccelDerivFromParams()
         return zonHarmDragMod
 
     ## THIS IS THE METHOD TO BE MODIFIED IF A CHANGE IN THE STATE IS TO BE ACCOMPLISHED!!!
@@ -546,59 +478,11 @@ class dragZonalHarmonicModel(dynamicModelBase):
         H_drag = self._params[8]
         theta_dot = self._params[9]
 
-        # x = X[0]
-        # y = X[1]
-        # z = X[2]
-        # x_dot = X[3]
-        # y_dot = X[4]
-        # z_dot = X[5]
-
-        # mu = self._params[0]
-        # R_E = self._params[1]
-        # J = self._params[2]
-        # CD_drag = self._params[3]
-        # A_drag = self._params[4]
-        # mass_sat = self._params[5]
-        # rho_0_drag = self._params[6]
-        # r0_drag = self._params[7]
-        # H_drag = self._params[8]
-        # theta_dot = self._params[9]
-        # include_two_body_dynamics = self._params[10]
-
-        # F = np.array([x_dot,
-        #               y_dot,
-        #               z_dot,
-        #               self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[2](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-        #              ])
-
-        # F = np.array([x_dot,
-        #               y_dot,
-        #               z_dot,
-        #               self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               self._modelLambda[2](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot),
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0,
-        #               0])
-
-
         nmbrOfStates = self.getNmbrOfStates()
 
         F = np.zeros(nmbrOfStates)
         for i in range(0, nmbrOfStates):
             F[i] = self._modelLambda[i](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-
 
         return F
 
@@ -628,48 +512,6 @@ class dragZonalHarmonicModel(dynamicModelBase):
         r0_drag = self._params[7]
         H_drag = self._params[8]
         theta_dot = self._params[9]
-
-
-        # x = X[0]
-        # y = X[1]
-        # z = X[2]
-        # x_dot = X[3]
-        # y_dot = X[4]
-        # z_dot = X[5]
-        #
-        # mu = self._params[0]
-        # R_E = self._params[1]
-        # J = self._params[2]
-        # CD_drag = self._params[3]
-        # A_drag = self._params[4]
-        # mass_sat = self._params[5]
-        # rho_0_drag = self._params[6]
-        # r0_drag = self._params[7]
-        # H_drag = self._params[8]
-        # theta_dot = self._params[9]
-        # include_two_body_dynamics = self._params[10]
-
-        # A = np.zeros([6,6])
-        #
-        # for i in range(0,6):
-        #     for j in range(0,6):
-        #         A[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-
-
-
-        # A = np.zeros([18,18])
-        #
-        # for i in range(0,6):
-        #     for j in range(0,6):
-        #         A[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
-        #
-        #
-        # for i in range(3,6):
-        #     for j in range(6,9):
-        #         A[i][j] = self._Alambda_params[i-3][j-6](x, y, z, x_dot, y_dot, z_dot,
-        #                         mu, R_E, [J], CD_drag, A_drag, mass_sat,
-        #                         rho_0_drag, r0_drag, H_drag, theta_dot)
-
 
         nmbrOfStates = self.getNmbrOfStates()
         A = np.zeros([nmbrOfStates,nmbrOfStates])
@@ -708,10 +550,6 @@ class dragZonalHarmonicModel(dynamicModelBase):
         zonHarmSymbMod = zonHarmMod.getSymbolicModel()
         dragSymbMod = dragMod.getSymbolicModel()
 
-        # self._modelSymb = [zonHarmSymbMod[0] + dragSymbMod[0],
-        #                    zonHarmSymbMod[1] + dragSymbMod[1],
-        #                    zonHarmSymbMod[2] + dragSymbMod[2]]
-
         x, y, z = sp.symbols('x y z')
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
         mu = sp.symbols('mu')
@@ -720,12 +558,6 @@ class dragZonalHarmonicModel(dynamicModelBase):
 
         CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, \
         H_drag, theta_dot = sp.symbols('CD_drag A_drag mass_sat rho_0_drag r0_drag H_drag theta_dot')
-
-        # a1 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[0], "numpy")
-        # a2 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[1], "numpy")
-        # a3 = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), self._modelSymb[2], "numpy")
-        #
-        # self._modelLambda = [a1, a2, a3]
 
         nmbrOfStates = self.getNmbrOfStates()
 
@@ -755,8 +587,6 @@ class dragZonalHarmonicModel(dynamicModelBase):
         """
         degree = self._params[2].size - 1
 
-        #acc = self._modelSymb
-
         x, y, z = sp.symbols('x y z')
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
@@ -767,30 +597,11 @@ class dragZonalHarmonicModel(dynamicModelBase):
         CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, \
         H_drag, theta_dot = sp.symbols('CD_drag A_drag mass_sat rho_0_drag r0_drag H_drag theta_dot')
 
-        # X = [x, y, z, x_dot, y_dot, z_dot]
-        #
-        # dF = [[0 for i in range(6)] for i in range(6)]
-        # A_lambda = [[0 for i in range(6)] for i in range(6)]
-        #
-        # F = [x_dot, y_dot, z_dot, acc[0], acc[1], acc[2]]
-        #
-        # for i in range(0, 6) :
-        #     for j in range(0, 6) :
-        #         dF[i][j] = sp.diff(F[i], X[j])
-        #         A_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), dF[i][j], "numpy")
-        #
-        # self._jacobianSymb = dF
-        # self._jacobianLambda = A_lambda
-
-
-
         nmbrOfStates = self.getNmbrOfStates()
 
         F = [0 for i in range(0, nmbrOfStates)]
         dF = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
         A_lambda = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
-
-        #F = [x_dot, y_dot, z_dot, acc[0], acc[1], acc[2]]
 
         for i in range(0, nmbrOfStates) :
             F[i] = self._modelSymb[i]
@@ -802,51 +613,3 @@ class dragZonalHarmonicModel(dynamicModelBase):
         self._jacobianLambda = A_lambda
 
         return self._jacobianSymb
-
-    # def _getAccelDerivFromParams(self) :
-    #
-    #     degree = self._params[2].size - 1
-    #
-    #     #acc = self._modelSymb
-    #
-    #     x, y, z = sp.symbols('x, y, z')
-    #     x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
-    #
-    #     mu = sp.symbols('mu')
-    #     R_E = sp.symbols('R_E')
-    #     J = sp.symarray('J', degree + 1)
-    #     #J_2 = J[2]
-    #     CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot = sp.symbols('C_D_drag A_drag mass_sat rho_0_drag r0_drag H_drag theta_dot')
-    #
-    #     # dF = [[0 for i in range(3)] for i in range(3)]
-    #     # A_lambda = [[0 for i in range(3)] for i in range(3)]
-    #     #
-    #     # for i in range(0,3) :
-    #     #     dF[i][0] = sp.diff(acc[i],mu)
-    #     #     dF[i][1] = sp.diff(acc[i],J_2)
-    #     #     dF[i][2] = sp.diff(acc[i],CD_drag)
-    #     #
-    #     # for i in range(0, 3) :
-    #     #     for j in range(0, 3) :
-    #     #         A_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), dF[i][j], "numpy")
-    #     #
-    #     # self._A_params = dF
-    #     # self._Alambda_params = A_lambda
-    #
-    #     nmbrStates = self.getNmbrOfStates()
-    #
-    #     F = [0 for i in range(0, nmbrStates)]
-    #     dF = [[0 for i in range(0, nmbrStates)] for i in range(0, nmbrStates)]
-    #     A_lambda = [[0 for i in range(0, nmbrStates)] for i in range(0, nmbrStates)]
-    #
-    #     for i in range(0, nmbrStates) :
-    #         F[i] = self._modelSymb[i]
-    #         for j in range(0, nmbrStates) :
-    #             dF[i][j] = sp.diff(F[i], self._stateSymb[j])
-    #             A_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J], CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot), dF[i][j], "numpy")
-    #
-    #     self._jacobianSymb = dF
-    #     self._jacobianLambda = A_lambda
-    #
-    #
-    #     return
