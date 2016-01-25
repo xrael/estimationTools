@@ -184,7 +184,7 @@ class dynamicModelBase(modelBase):
 # This class is a base for all classes which compute
 # observation model Y = G(X,t).
 ######################################################
-class observerBase(modelBase):
+class observerModelBase(modelBase):
     """
     Base class of every observation model G(X,t).
     Every observation model has, at least, one set of coordinates against which
@@ -197,7 +197,7 @@ class observerBase(modelBase):
     ##------------------------------------------
 
     def __init__(self, stateSymb, params, observerCoordinates):
-        super(observerBase, self).__init__(stateSymb, params)
+        super(observerModelBase, self).__init__(stateSymb, params)
 
         self._nmbrCoordinates = observerCoordinates.shape[0]
         self._observerCoordinates = observerCoordinates

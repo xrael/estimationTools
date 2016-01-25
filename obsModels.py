@@ -7,14 +7,14 @@
 # observation models and their derivatives.
 ######################################################
 
-from modelBase import observerBase
+from modelBase import observerModelBase
 import coordinateTransformations
 import sympy as sp
 import numpy as np
 
 
 ### Range and Range-rate observations
-class rangeRangeRateObsModel(observerBase):
+class rangeRangeRateObsModel(observerModelBase):
 
     _jacobianSymb_posVel = None
     _jacobianLambda_posVel = None
@@ -47,13 +47,14 @@ class rangeRangeRateObsModel(observerBase):
         x, y, z = sp.symbols('x, y, z')
         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
-        mu, CD_drag, J_2 = sp.symbols('mu CD_drag, J_2')
-        x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
+        #mu, CD_drag, J_2 = sp.symbols('mu CD_drag, J_2')
+        #x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
         # X_GS1, Y_GS1, Z_GS1 = sp.symbols('X_GS1 Y_GS1 Z_GS1')
         # X_GS2, Y_GS2, Z_GS2 = sp.symbols('X_GS2 Y_GS2 Z_GS2')
         # X_GS3, Y_GS3, Z_GS3 = sp.symbols('X_GS3 Y_GS3 Z_GS3')
 
-        X_symb = [x, y, z, x_dot, y_dot, z_dot, mu, CD_drag, J_2, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs]
+        #X_symb = [x, y, z, x_dot, y_dot, z_dot, mu, CD_drag, J_2, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs, x_gs, y_gs, z_gs]
+        X_symb = [x, y, z, x_dot, y_dot, z_dot]
         return X_symb
 
     ## -------------------------Public Interface--------------------------
@@ -74,31 +75,37 @@ class rangeRangeRateObsModel(observerBase):
         y_dot = X[4]
         z_dot = X[5]
 
-        x_gs1 = X[9]
-        y_gs1 = X[10]
-        z_gs1 = X[11]
-        x_gs2 = X[12]
-        y_gs2 = X[13]
-        z_gs2 = X[14]
-        x_gs3 = X[15]
-        y_gs3 = X[16]
-        z_gs3 = X[17]
+        # x_gs1 = X[9]
+        # y_gs1 = X[10]
+        # z_gs1 = X[11]
+        # x_gs2 = X[12]
+        # y_gs2 = X[13]
+        # z_gs2 = X[14]
+        # x_gs3 = X[15]
+        # y_gs3 = X[16]
+        # z_gs3 = X[17]
         theta_0 = self._params[0]
         theta_dot = self._params[1]
         GS_nmbr = params
 
-        if GS_nmbr == 0:
-            x_gs = x_gs1
-            y_gs = y_gs1
-            z_gs = z_gs1
-        elif GS_nmbr == 1:
-            x_gs = x_gs2
-            y_gs = y_gs2
-            z_gs = z_gs2
-        else : # GS_nmbr == 2
-            x_gs = x_gs3
-            y_gs = y_gs3
-            z_gs = z_gs3
+        GS_coord = self.getObserverCoordinates()
+
+        x_gs = GS_coord[GS_nmbr][0]
+        y_gs = GS_coord[GS_nmbr][1]
+        z_gs = GS_coord[GS_nmbr][2]
+
+        # if GS_nmbr == 0:
+        #     x_gs = x_gs1
+        #     y_gs = y_gs1
+        #     z_gs = z_gs1
+        # elif GS_nmbr == 1:
+        #     x_gs = x_gs2
+        #     y_gs = y_gs2
+        #     z_gs = z_gs2
+        # else : # GS_nmbr == 2
+        #     x_gs = x_gs3
+        #     y_gs = y_gs3
+        #     z_gs = z_gs3
 
         theta = theta_dot * t + theta_0
 
@@ -107,9 +114,6 @@ class rangeRangeRateObsModel(observerBase):
         G = np.zeros(nmbrOfOutputs)
         for i in range(0, nmbrOfOutputs):
             G[i] = self._modelLambda[i](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
-
-        # G = np.array([self._modelLambda[0](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot),
-        #             self._modelLambda[1](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)])
 
         return G
 
@@ -129,15 +133,15 @@ class rangeRangeRateObsModel(observerBase):
         z_dot = X[5]
 
         # CHANGE THIS PART FOR ADDING MORE STATES!!!
-        x_gs1 = X[9]
-        y_gs1 = X[10]
-        z_gs1 = X[11]
-        x_gs2 = X[12]
-        y_gs2 = X[13]
-        z_gs2 = X[14]
-        x_gs3 = X[15]
-        y_gs3 = X[16]
-        z_gs3 = X[17]
+        # x_gs1 = X[9]
+        # y_gs1 = X[10]
+        # z_gs1 = X[11]
+        # x_gs2 = X[12]
+        # y_gs2 = X[13]
+        # z_gs2 = X[14]
+        # x_gs3 = X[15]
+        # y_gs3 = X[16]
+        # z_gs3 = X[17]
         #-------------------------------------------
         theta_0 = self._params[0]
         theta_dot = self._params[1]
@@ -145,31 +149,37 @@ class rangeRangeRateObsModel(observerBase):
 
         theta = theta_dot * t + theta_0
 
-        Htilde = np.zeros([2,18])
+        GS_coord = self.getObserverCoordinates()
 
-        if GS_nmbr == 0:
-            x_gs = x_gs1
-            y_gs = y_gs1
-            z_gs = z_gs1
-            for i in range(0,2):
-                for j in range(9, 12) :
-                    Htilde[i][j] = self._jacobianLambda_GSpos[i][j-9](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+        x_gs = GS_coord[GS_nmbr][0]
+        y_gs = GS_coord[GS_nmbr][1]
+        z_gs = GS_coord[GS_nmbr][2]
 
-        elif GS_nmbr == 1:
-            x_gs = x_gs2
-            y_gs = y_gs2
-            z_gs = z_gs2
-            for i in range(0,2):
-                for j in range(12, 15):
-                    Htilde[i][j] = self._jacobianLambda_GSpos[i][j-12](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+        Htilde = np.zeros([2,6])
 
-        else : # GS_nmbr == 2
-            x_gs = x_gs3
-            y_gs = y_gs3
-            z_gs = z_gs3
-            for i in range(0,2):
-                for j in range(15, 18) :
-                     Htilde[i][j] = self._jacobianLambda_GSpos[i][j-15](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+        # if GS_nmbr == 0:
+        #     x_gs = x_gs1
+        #     y_gs = y_gs1
+        #     z_gs = z_gs1
+        #     for i in range(0,2):
+        #         for j in range(9, 12) :
+        #             Htilde[i][j] = self._jacobianLambda_GSpos[i][j-9](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+        #
+        # elif GS_nmbr == 1:
+        #     x_gs = x_gs2
+        #     y_gs = y_gs2
+        #     z_gs = z_gs2
+        #     for i in range(0,2):
+        #         for j in range(12, 15):
+        #             Htilde[i][j] = self._jacobianLambda_GSpos[i][j-12](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
+        #
+        # else : # GS_nmbr == 2
+        #     x_gs = x_gs3
+        #     y_gs = y_gs3
+        #     z_gs = z_gs3
+        #     for i in range(0,2):
+        #         for j in range(15, 18) :
+        #              Htilde[i][j] = self._jacobianLambda_GSpos[i][j-15](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
 
         for i in range(0,2):
             for j in range(0, 6) :
