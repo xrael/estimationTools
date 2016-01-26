@@ -213,6 +213,8 @@ class ekfProc :
         prefit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
         postfit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
 
+        ckf_counter = 0
+
         for i in range(0, nmbrObs): # Iteration for every observation
             t_i = obs_time_vector[i]
             Y_i = obs_vector[i]
@@ -221,13 +223,14 @@ class ekfProc :
                 # Only use process noise if the gap in time is not too big
                 if t_i - obs_time_vector[i-1] <= 100:
                     Q_i = Q
-
-            if i >= start_using_EKF_at_obs and i >= 1:
+            if ckf_counter >= start_using_EKF_at_obs and i >= 1:
                 if t_i - obs_time_vector[i-1] <= 20:
                     useEKF = True  # Only use EKF after processing start_using_EKF_at_obs observations
-                else :
+                else :  # CHECK THIS!!!!! The ckf should be used for an intervalo of time
+                    ckf_counter = 0
                     useEKF = False
             else:
+                ckf_counter = ckf_counter + 1
                 useEKF = False
 
             self.computeNextEstimate(t_i, Y_i, obs_params[i], R, dt, rel_tol, abs_tol, useEKF, Q_i)

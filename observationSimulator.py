@@ -87,6 +87,13 @@ class observationSimulator:
         """
         return self._observed_states
 
+    def getDynamicSimulator(self):
+        """
+        Retrieves the dynamic simulator.
+        :return:
+        """
+        return self._dynSimulator
+
     def simulate(self, initialState, dynamic_params, t0, tf, dt, rtol, atol):
 
         (timeVec, statesVec) = self._dynSimulator.propagate(initialState, dynamic_params, t0, tf, dt, rtol, atol)

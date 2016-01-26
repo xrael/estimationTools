@@ -249,6 +249,8 @@ class satelliteState:
         state._orbitInformation = state._getRV()
 
         return state
+
+    @classmethod
     #--------------------------------------------------------
 
     def advanceTime(self, dt):
@@ -524,4 +526,212 @@ class satelliteState:
 
         return ret
 
+######################################################
+
+######################################################
+#Statelist:
+# Implements a list of states.
+######################################################
+class stateList:
+
+    # Constructors and factory methods--------------------
+    def __init__(self):
+        self._stateVector = []
+
+    @classmethod
+    def getFromVectors(cls, mu, state_vectors, time_vector):
+        nmbr_states = time_vector.size
+
+        state_list = stateList()
+
+        for i in range(0, nmbr_states):
+            st = satelliteState.getSatelliteStateObjFromRV(mu, state_vectors[i][0:3],state_vectors[i][3:6], time_vector[i])
+            state_list.add(st)
+
+        return  state_list
+
+
+    # reset the list
+    def emptyList(self):
+        del self._stateVector[:]
+        self._stateVector = []
+
+    def add(self, state):
+        self._stateVector.append(state)
+
+    def getTimeVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        time = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            time[index] = state.getTime()
+            index = index + 1
+        return time
+
+    def getPositionVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        r_vec = np.zeros((len(self._stateVector), 3))
+        index = 0
+        for state in self._stateVector:
+            r_vec[index] = state.getPosition()
+            index = index + 1
+        return r_vec
+
+    def getRadiusVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        r = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            r[index] = state.getRadius()
+            index = index + 1
+        return r
+
+    def getVelocityVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        v_vec = np.zeros((len(self._stateVector), 3))
+        index = 0
+        for state in self._stateVector:
+            v_vec[index] = state.getVelocity()
+            index = index + 1
+        return v_vec
+
+    def getStateVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        state_vec = np.zeros((len(self._stateVector), 6))
+        index = 0
+        for state in self._stateVector:
+            state_vec[index] = np.concatenate([state.getPosition(), state.getVelocity()])
+            index = index + 1
+        return state_vec
+
+    def getSpeedVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        v = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            v[index] = state.getSpeed()
+            index = index + 1
+        return v
+
+    def getSemimajorAxisVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        a = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            a[index] = state.getOrbitalElements().a
+            index = index + 1
+        return a
+
+    def getEccentricityVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        e = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            e[index] = state.getOrbitalElements().e
+            index = index + 1
+        return e
+
+    def getInclinationVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        i = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            i[index] = state.getOrbitalElements().i
+            index = index + 1
+        return i
+
+    def getRAANVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        raan = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            raan[index] = state.getOrbitalElements().raan
+            index = index + 1
+        return raan
+
+    def getArgumentOfPeriapsisVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        w = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            w[index] = state.getOrbitalElements().w
+            index = index + 1
+        return w
+
+    def getTrueAnomalyVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        nu = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            nu[index] = state.getOrbitalElements().nu
+            index = index + 1
+        return nu
+
+    def getEccentricAnomalyVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        Ecc = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            Ecc[index] = state.getOrbitalElements().E
+            index = index + 1
+        return Ecc
+
+    def getEnergyVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        E = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            E[index] = state.getRealEnergy()
+            index = index + 1
+        return E
+
+    def getAngularMomentumVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        h = np.zeros([len(self._stateVector), 3])
+        index = 0
+        for state in self._stateVector:
+            h[index] = state.getAngularMomentum()
+            index = index + 1
+        return h
+
+    def getTimeOfPeriapseVector(self):
+        if not self._stateVector: #empty list
+            return np.array([])
+
+        tp = np.zeros(len(self._stateVector))
+        index = 0
+        for state in self._stateVector:
+            tp[index] = state.getTimeOfPeriapse()
+            index = index + 1
+        return tp
 ######################################################

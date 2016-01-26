@@ -10,7 +10,6 @@ import sympy as sp
 import numpy as np
 from modelBase import dynamicModelBase
 
-
 ######################################################
 # zonalHarmonicsModel.
 #
@@ -131,7 +130,9 @@ class zonalHarmonicsModel(dynamicModelBase):
         _potential, _acceleration, _potentialLambda, _accelerationLambda.
         :return:
         """
-        degree = self._params[2].size - 1
+        J_params = self._params[2]
+        degree = J_params.size - 1
+
         includeTwoBodyDynamics = self._params[3]
 
         x, y, z = sp.symbols('x y z')
@@ -156,9 +157,11 @@ class zonalHarmonicsModel(dynamicModelBase):
             P[1] = u
             for l in range(1, degree + 1):
                 if l >= 2:
-                    P[l] = (u*(2*l-1) * P[l-1] - (l-1)*P[l-2])/l
+                    P[l] = ((u*(2*l-1) * P[l-1] - (l-1)*P[l-2])/l)
+                    P[l].simplify()
 
-                U -= mu/r * (R_E/r)**l * J[l] * P[l]
+                if J_params[l] != 0:
+                    U = U - mu/r * (R_E/r)**l * J[l] * P[l]
 
         dUx = sp.diff(U, x)
         dUy = sp.diff(U, y)

@@ -174,6 +174,24 @@ def sez2AzElRange(r_sez):
     return np.array([azimuth, elevation, range])
 
 
+def eci2RightAscensionDeclinationRange(r_eci):
+    """
+    Tranforms from ECI to right ascension, declination, and range.
+    :param r_eci: Position in ECI.
+    :return:
+    """
+    x = r_eci[0]
+    y = r_eci[1]
+    z = r_eci[2]
+    r_xy = np.sqrt(x**2+y**2)
+    r = np.sqrt(x**2+y**2+z**2)
+
+    rightAs = np.arctan2(y, x)
+    dec = np.arctan2(z,r_xy) # declination is between -90 and 90
+
+    return np.array([rightAs, dec, r])
+
+
 def ROT2(alpha):
     """
     Basic Rotation through 2nd axis by an Euler Angle alpha
