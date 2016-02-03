@@ -191,6 +191,20 @@ def eci2RightAscensionDeclinationRange(r_eci):
 
     return np.array([rightAs, dec, r])
 
+def ROT1(alpha):
+    """
+    Basic Rotation through 1st axis by an Euler Angle alpha
+    :param alpha: Angle in radians.
+    :return: The Direction Cosine Matrix.
+    """
+    cos_al = np.cos(alpha)
+    sin_al = np.sin(alpha)
+
+    DCM = np.array([[1,      0,            0],
+                    [0,      cos_al,  sin_al],
+                    [0,     -sin_al,  cos_al]])
+
+    return DCM
 
 def ROT2(alpha):
     """
