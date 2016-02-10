@@ -8,6 +8,51 @@
 
 import numpy as np
 
+def ROT1(alpha):
+    """
+    Basic Rotation through 1st axis by an Euler Angle alpha
+    :param alpha: Angle in radians.
+    :return: The Direction Cosine Matrix.
+    """
+    cos_al = np.cos(alpha)
+    sin_al = np.sin(alpha)
+
+    DCM = np.array([[1,      0,            0],
+                    [0,      cos_al,  sin_al],
+                    [0,     -sin_al,  cos_al]])
+
+    return DCM
+
+def ROT2(alpha):
+    """
+    Basic Rotation through 2nd axis by an Euler Angle alpha
+    :param alpha: Angle in radians.
+    :return: The Direction Cosine Matrix.
+    """
+    cos_al = np.cos(alpha)
+    sin_al = np.sin(alpha)
+
+    DCM = np.array([[cos_al, 0, -sin_al],
+                    [0,      1,       0],
+                    [sin_al, 0,  cos_al]])
+
+    return DCM
+
+def ROT3(alpha):
+    """
+    Basic Rotation through 3rd axis by an Euler Angle alpha
+    :param alpha: Angle in radians.
+    :return: The Direction Cosine Matrix.
+    """
+    cos_al = np.cos(alpha)
+    sin_al = np.sin(alpha)
+
+    DCM = np.array([[cos_al,    sin_al, 0],
+                    [-sin_al,   cos_al, 0],
+                    [0,         0,      1]])
+
+    return DCM
+
 def eci2ecef(r_eci, GMST):
     """
     Transforms an ECI position into an ECEF position.
@@ -129,7 +174,7 @@ def lla2ecef(lat, long, height, R_eq, e_planet):
     C_h = (C + height)
     S_h = (S + height)
 
-    r_ecef = np.array([ C_h*cos_lat*cos_long,
+    r_ecef = np.array([C_h*cos_lat*cos_long,
                        C_h*cos_lat*sin_long,
                        S_h*sin_lat])
 
@@ -190,48 +235,3 @@ def eci2RightAscensionDeclinationRange(r_eci):
     dec = np.arctan2(z,r_xy) # declination is between -90 and 90
 
     return np.array([rightAs, dec, r])
-
-def ROT1(alpha):
-    """
-    Basic Rotation through 1st axis by an Euler Angle alpha
-    :param alpha: Angle in radians.
-    :return: The Direction Cosine Matrix.
-    """
-    cos_al = np.cos(alpha)
-    sin_al = np.sin(alpha)
-
-    DCM = np.array([[1,      0,            0],
-                    [0,      cos_al,  sin_al],
-                    [0,     -sin_al,  cos_al]])
-
-    return DCM
-
-def ROT2(alpha):
-    """
-    Basic Rotation through 2nd axis by an Euler Angle alpha
-    :param alpha: Angle in radians.
-    :return: The Direction Cosine Matrix.
-    """
-    cos_al = np.cos(alpha)
-    sin_al = np.sin(alpha)
-
-    DCM = np.array([[cos_al, 0, -sin_al],
-                    [0,      1,       0],
-                    [sin_al, 0,  cos_al]])
-
-    return DCM
-
-def ROT3(alpha):
-    """
-    Basic Rotation through 3rd axis by an Euler Angle alpha
-    :param alpha: Angle in radians.
-    :return: The Direction Cosine Matrix.
-    """
-    cos_al = np.cos(alpha)
-    sin_al = np.sin(alpha)
-
-    DCM = np.array([[cos_al,    sin_al, 0],
-                    [-sin_al,   cos_al, 0],
-                    [0,         0,      1]])
-
-    return DCM

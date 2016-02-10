@@ -117,35 +117,32 @@ class ckfProc :
         :param Q_i_1: [2-dimensional numpy array] Process noise covariance.
         :return:
         """
-        params = () #self._dynModel.getParams()
-        #params = (self._dynModel,) + params
-
-        #obsParams = self._obsModel.getParams()
+        params = ()
 
         if t_i == self._t_i_1:
             stm_i = self._I
-            X_ref_i = self._Xref_i_1
+            Xref_i = self._Xref_i_1
             xbar_i = self._xhat_i_1
             Pbar_i = self._P_i_1
         else:
-            (states, stms, time, X_ref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1,
-                                                                                             self._I, params,
-                                                                                             self._t_i_1,
-                                                                                             dt, t_i, rel_tol, abs_tol)
+            (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
+                                                                                  self._t_i_1, dt, t_i, rel_tol, abs_tol)
 
             # Time Update
             xbar_i = stm_i.dot(self._xhat_i_1)
             Pbar_i = stm_i.dot(self._P_i_1).dot(stm_i.T)
-            if Q_i_1 is not None:
+            if self._dynModel.usingSNC() and Q_i_1 is not None:
                 # Process Noise Transition Matrix with constant velocity approximation
-                pntm_i = self._dynModel.getProcessSTM(self._t_i_1, t_i)
-                Pbar_i = Pbar_i + pntm_i.dot(Q_i_1).dot(pntm_i.T)
+                Q = self._dynModel.getSncCovarianceMatrix(self._t_i_1, t_i, Xref_i + xbar_i, Q_i_1) # xbar_i should be 0 in the EKF
+                Pbar_i = Pbar_i + Q
+            elif self._dynModel.usingDMC() and Q_i_1 is not None:
+                Q = self._dynModel.getSmcCovarianceMatrix(self._t_i_1, t_i, Q_i_1)
+                Pbar_i = Pbar_i + Q
 
         # Read Observation
-        #obP = obsParams + (obs_params,)
         obP = obs_params
-        Htilde_i = self._obsModel.computeJacobian(X_ref_i, t_i, obP)
-        y_i = Y_i - self._obsModel.computeModel(X_ref_i, t_i, obP)
+        Htilde_i = self._obsModel.computeJacobian(Xref_i, t_i, obP)
+        y_i = Y_i - self._obsModel.computeModel(Xref_i, t_i, obP)
 
         K_i = Pbar_i.dot(Htilde_i.T).dot(self._invert(Htilde_i.dot(Pbar_i).dot(Htilde_i.T) + R_i))
 
@@ -155,7 +152,7 @@ class ckfProc :
         P_i = self._computeCovariance(Htilde_i, K_i, Pbar_i, R_i)
 
         self._t_i_1 = t_i
-        self._Xref_i_1 = X_ref_i
+        self._Xref_i_1 = Xref_i
         self._xhat_i_1 = xhat_i
         self._P_i_1 = P_i
         self._prefit_residual = y_i

@@ -66,6 +66,8 @@ class ekfProc :
         """
         proc = ekfProc()
 
+        obsModel.defineSymbolicState(dynModel.getSymbolicState()) # Redefines the state of the observer
+
         proc._dynModel = dynModel
         proc._obsModel = obsModel
 
@@ -120,44 +122,34 @@ class ekfProc :
         :param Q_i_1: [2-dimensional numpy array] Process noise covariance.
         :return:
         """
-        params = () #self._dynModel.getParams()
-        #params = (self._dynModel,) + params
-
-        #obsParams = self._obsModel.getParams()
+        params = ()
 
         if t_i == self._t_i_1:
             stm_i = self._I
-            X_ref_i = self._Xref_i_1
+            Xref_i = self._Xref_i_1
             xbar_i = self._xhat_i_1
             Pbar_i = self._P_i_1
         else:
-            (states, stms, time, X_ref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1,
-                                                                                 self._I, params,
-                                                                                 self._t_i_1,
-                                                                                 dt, t_i, rel_tol, abs_tol)
-            # (states, stms, time, X_ref_i, stm_i)  = propagator.propagateReferenceSTM(self._Xref_i_1, self._I,
-            #                                              dyn.dynamic_model, params,
-            #                                              self._t_i_1, dt, t_i, rel_tol, abs_tol)
-
+            (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
+                                                                                 self._t_i_1, dt, t_i, rel_tol, abs_tol)
             # Time Update
             #if useEKF == False: # use CKF instead
             xbar_i = stm_i.dot(self._xhat_i_1)
             #else:
                 #xbar_i = np.zeros(np.shape(stm_i)[0])
             Pbar_i = stm_i.dot(self._P_i_1).dot(stm_i.T)
-            if Q_i_1 is not None:
+            if self._dynModel.usingSNC() and Q_i_1 is not None:
                 # Process Noise Transition Matrix with constant velocity approximation
-                #pntm_i = np.zeros((np.shape(stm_i)[0], np.shape(Q_i_1)[1]))
-                #pntm_i[0:3, :] = ((t_i - self._t_i_1)**2)/2 * np.eye(3)
-                #pntm_i[3:6, :] = (t_i - self._t_i_1) * np.eye(3)
-                pntm_i = self._dynModel.getProcessSTM(self._t_i_1, t_i)
-                Pbar_i = Pbar_i + pntm_i.dot(Q_i_1).dot(pntm_i.T)
+                Q = self._dynModel.getSncCovarianceMatrix(self._t_i_1, t_i, Xref_i + xbar_i, Q_i_1) # xbar_i should be 0 in the EKF
+                Pbar_i = Pbar_i + Q
+            elif self._dynModel.usingDMC() and Q_i_1 is not None:
+                Q = self._dynModel.getSmcCovarianceMatrix(self._t_i_1, t_i, Q_i_1)
+                Pbar_i = Pbar_i + Q
 
         # Read Observation
-        #obP = obsParams + (obs_params,)
         obP = obs_params
-        Htilde_i = self._obsModel.computeJacobian(X_ref_i, t_i, obP)
-        y_i = Y_i - self._obsModel.computeModel(X_ref_i, t_i, obP)
+        Htilde_i = self._obsModel.computeJacobian(Xref_i, t_i, obP)
+        y_i = Y_i - self._obsModel.computeModel(Xref_i, t_i, obP)
 
         K_i = Pbar_i.dot(Htilde_i.T).dot(self._invert(Htilde_i.dot(Pbar_i).dot(Htilde_i.T) + R_i))
 
@@ -165,7 +157,7 @@ class ekfProc :
         #if useEKF == False: # use CKF instead
         predicted_residuals_i = y_i - Htilde_i.dot(xbar_i)
         xhat_i = xbar_i + K_i.dot(predicted_residuals_i)
-       # else:
+        # else:
             #predicted_residuals_i = y_i
             #xhat_i = K_i.dot(predicted_residuals_i)
 
@@ -173,14 +165,14 @@ class ekfProc :
 
         P_i = self._computeCovariance(Htilde_i, K_i, Pbar_i, R_i)
 
-        self._Xhat_i_1 = X_ref_i + xhat_i         # Non-linear estimate
+        self._Xhat_i_1 = Xref_i + xhat_i         # Non-linear estimate
 
         if useEKF == True:
-            X_ref_i += xhat_i                       # Reference update
-            xhat_i = np.zeros(np.size(X_ref_i))     # New xhat
+            Xref_i += xhat_i                       # Reference update
+            xhat_i = np.zeros(np.size(Xref_i))     # New xhat
 
         self._t_i_1 = t_i
-        self._Xref_i_1 = X_ref_i
+        self._Xref_i_1 = Xref_i
         self._xhat_i_1 = xhat_i  # The correction is stored even though it's zeroed after updating the reference
         self._P_i_1 = P_i
         self._prefit_residual = y_i
@@ -200,7 +192,7 @@ class ekfProc :
         :param dt:
         :param rel_tol:
         :param abs_tol:
-        :param Q:
+        :param Q: [2-dim numpy array] Process noise covariance.
         :return:
         """
         nmbrObsAtEpoch = np.shape(obs_vector)[1]
@@ -219,14 +211,14 @@ class ekfProc :
             t_i = obs_time_vector[i]
             Y_i = obs_vector[i]
             Q_i = None
-            if Q is not None and i >= 1:
-                # Only use process noise if the gap in time is not too big
+            if Q is not None and i >= 1: # Only use process noise if the gap in time is not too big
                 if t_i - obs_time_vector[i-1] <= 100:
                     Q_i = Q
+
             if ckf_counter >= start_using_EKF_at_obs and i >= 1:
                 if t_i - obs_time_vector[i-1] <= 20:
                     useEKF = True  # Only use EKF after processing start_using_EKF_at_obs observations
-                else :  # CHECK THIS!!!!! The ckf should be used for an intervalo of time
+                else :  # CHECK THIS!!!!! The ckf should be used for an interval of time
                     ckf_counter = 0
                     useEKF = False
             else:
@@ -246,7 +238,7 @@ class ekfProc :
     # The following getters should be used after calling computeNextEstimate()
     # Current state estimate
     def getNonLinearEstimate(self) :
-        return self._Xhat_i_1 #(self._Xref_i_1 + self._xhat_i_1)
+        return self._Xhat_i_1
 
     # Current deviation state estimate
     def getDeviationEstimate(self) :

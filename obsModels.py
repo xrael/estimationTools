@@ -23,8 +23,8 @@ class rangeRangeRateObsModel(observerModelBase):
     _jacobianSymb_GSpos = None
     _jacobianLambda_GSpos = None
 
-    def __init__(self, stateSymb, params, observerCoordinates):
-        super(rangeRangeRateObsModel, self).__init__(stateSymb, params, observerCoordinates)
+    def __init__(self, name, stateSymb, params, observerCoordinates):
+        super(rangeRangeRateObsModel, self).__init__(name, stateSymb, params, observerCoordinates)
 
         return
 
@@ -34,7 +34,8 @@ class rangeRangeRateObsModel(observerModelBase):
 
         params = (theta_0, angular_rate, R_eq, e_planet)
         symbState = rangeRangeRateObsModel.buildSymbolicState()
-        obs_mod = rangeRangeRateObsModel(symbState, params, GS_coordinates)
+        name = "RangeRangeRate"
+        obs_mod = rangeRangeRateObsModel(name, symbState, params, GS_coordinates)
 
         return obs_mod
 
@@ -157,7 +158,10 @@ class rangeRangeRateObsModel(observerModelBase):
         y_gs = GS_coord[GS_nmbr][1]
         z_gs = GS_coord[GS_nmbr][2]
 
-        Htilde = np.zeros([2,6])
+        nmbrOfOutputs = self.getNmbrOutputs()
+        nmbrOfStates = self.getNmbrOfStates()
+
+        Htilde = np.zeros([nmbrOfOutputs,nmbrOfStates])
 
         # if GS_nmbr == 0:
         #     x_gs = x_gs1
@@ -183,8 +187,9 @@ class rangeRangeRateObsModel(observerModelBase):
         #         for j in range(15, 18) :
         #              Htilde[i][j] = self._jacobianLambda_GSpos[i][j-15](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
 
-        for i in range(0,2):
-            for j in range(0, 6) :
+
+        for i in range(0,nmbrOfOutputs):
+            for j in range(0, nmbrOfStates) :
                 Htilde[i][j] = self._jacobianLambda_posVel[i][j](x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot)
 
         return Htilde
@@ -236,8 +241,15 @@ class rangeRangeRateObsModel(observerModelBase):
         :return:
         """
         # satellite position in ECI
-        x, y, z = sp.symbols('x y z')
-        x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
+
+        #x, y, z = sp.symbols('x y z')
+        #x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
         # Ground station position in ECEF
         x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
         # Derivatives of Ground Station position in ECEF are not considered
@@ -278,22 +290,29 @@ class rangeRangeRateObsModel(observerModelBase):
         G = self._modelSymb
 
         # satellite position in ECI
-        x, y, z = sp.symbols('x y z')
-        x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
+        # x, y, z = sp.symbols('x y z')
+        # x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
         # Ground station position in ECEF
         x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
-
-        X = [x, y, z, x_dot, y_dot, z_dot] # State
 
         theta = sp.symbols('theta')
         theta_dot = sp.symbols('theta_dot')
 
-        dG = [[0 for i in range(6)] for i in range(2)]
-        Htilde_lambda = [[0 for i in range(6)] for i in range(2)]
+        nmbrOfStates = self.getNmbrOfStates()
+        nmbrOfOutputs = self.getNmbrOutputs()
 
-        for i in range(0, 2) :
-            for j in range(0, 6) :
-                dG[i][j] = sp.diff(G[i], X[j])
+        dG = [[0 for i in range(0,nmbrOfStates)] for i in range(0,nmbrOfOutputs)]
+        Htilde_lambda = [[0 for i in range(0,nmbrOfStates)] for i in range(0,nmbrOfOutputs)]
+
+        for i in range(0, nmbrOfOutputs) :
+            for j in range(0, nmbrOfStates) :
+                dG[i][j] = sp.diff(G[i], self._stateSymb[j])
                 Htilde_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot), dG[i][j], "numpy")
 
         self._jacobianSymb_posVel = dG
@@ -305,20 +324,28 @@ class rangeRangeRateObsModel(observerModelBase):
         G = self._modelSymb
 
         # satellite position in ECI
-        x, y, z = sp.symbols('x y z')
-        x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
+        # x, y, z = sp.symbols('x y z')
+        # x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
         # Ground Station Position in ECEF
         x_gs, y_gs, z_gs = sp.symbols('x_gs y_gs z_gs')
 
         X = [x_gs, y_gs, z_gs] # State
 
+        nmbrOfOutputs = self.getNmbrOutputs()
+
         theta = sp.symbols('theta')
         theta_dot = sp.symbols('theta_dot')
 
-        dG = [[0 for i in range(3)] for i in range(2)]
-        Htilde_lambda = [[0 for i in range(3)] for i in range(2)]
+        dG = [[0 for i in range(3)] for i in range(nmbrOfOutputs)]
+        Htilde_lambda = [[0 for i in range(3)] for i in range(nmbrOfOutputs)]
 
-        for i in range(0, 2) :
+        for i in range(0, nmbrOfOutputs) :
             for j in range(0, 3) :
                 dG[i][j] = sp.diff(G[i],X[j])
                 Htilde_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot), dG[i][j], "numpy")
@@ -403,10 +430,13 @@ class rightAscensionDeclinationObsModel(observerModelBase):
         y_dot = X[4]
         z_dot = X[5]
 
-        Htilde = np.zeros([2,6])
+        nmbrOfOutputs = self.getNmbrOutputs()
+        nmbrOfStates = self.getNmbrOfStates()
 
-        for i in range(0,2):
-            for j in range(0, 6) :
+        Htilde = np.zeros([nmbrOfOutputs,nmbrOfStates])
+
+        for i in range(0,nmbrOfOutputs):
+            for j in range(0, nmbrOfStates) :
                 Htilde[i][j] = self._jacobianLambda[i][j](x, y, z, x_dot, y_dot, z_dot)
 
         return Htilde
@@ -463,9 +493,16 @@ class rightAscensionDeclinationObsModel(observerModelBase):
         :return:
         """
         # satellite position in ECI
-        x, y, z = sp.symbols('x y z')
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
+
+       # x, y, z = sp.symbols('x y z')
         r_xy = sp.sqrt(x**2+y**2)
-        x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
+        #x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
         right_ascension = sp.atan2(y,x)
 
@@ -483,17 +520,27 @@ class rightAscensionDeclinationObsModel(observerModelBase):
         G = self._modelSymb
 
         # satellite position in ECI
-        x, y, z = sp.symbols('x y z')
-        x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
 
-        X = [x, y, z, x_dot, y_dot, z_dot] # State
+        # x, y, z = sp.symbols('x y z')
+        # x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
 
-        dG = [[0 for i in range(6)] for i in range(2)]
-        Htilde_lambda = [[0 for i in range(6)] for i in range(2)]
+        nmbrOfOutputs = self.getNmbrOutputs()
+        nmbrOfStates = self.getNmbrOfStates()
 
-        for i in range(0, 2) :
-            for j in range(0, 6) :
-                dG[i][j] = sp.diff(G[i], X[j]).simplify()
+        #X = [x, y, z, x_dot, y_dot, z_dot] # State
+
+        dG = [[0 for i in range(nmbrOfStates)] for i in range(nmbrOfOutputs)]
+        Htilde_lambda = [[0 for i in range(nmbrOfStates)] for i in range(nmbrOfOutputs)]
+
+        for i in range(0, nmbrOfOutputs) :
+            for j in range(0, nmbrOfStates) :
+                dG[i][j] = sp.diff(G[i], self._stateSymb[j]).simplify()
                 Htilde_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot), dG[i][j], "numpy")
 
         self._jacobianSymb = dG
