@@ -18,6 +18,9 @@ import sympy as sp
 #
 # getModelFunction(): Returns a function that permits computing F(X,t).
 # getSymbolicModel(): Returns a sympy object with the symbolic model.
+# getSymbolicState(): Returns a list of symbols with the state.
+# getName(): Returns the name of the model.
+# defineSymbolicState(): Redefines the state.
 # computeModelFromVector(): Computes the model using a vector of states and a time vector.
 # getNmbrOfStates(): Return the number of states.
 # getParameters(): Returns the constant parameters used by F.
@@ -35,8 +38,6 @@ class modelBase:
     _jacobianSymb = None
     _jacobianLambda = None
     _stateSymb = None
-    #_originalStateSymb = None
-    #_subModels = []
     _name = ""
     ##------------------------------------------
 
@@ -49,10 +50,7 @@ class modelBase:
         """
         self._name = name
         self._stateSymb = stateSymb             # Total state
-        #self._originalStateSymb = stateSymb     # State associated to the model
-        #self._stateSymbSubModels = []
         self._params = params
-        #self._subModels = []
         self._computeSymbolicModel()
         self._computeSymbolicJacobian()
         return
@@ -117,65 +115,10 @@ class modelBase:
         :return:
         """
         self._stateSymb = stateSymb
-        #self._originalStateSymb = stateSymb
-
-        #self.removeAllSubmodels() # all submodels are removed
-
         self._computeSymbolicModel()
         self._computeSymbolicJacobian()
 
         return
-
-    # def addSubmodel(self, model):
-    #     self._subModels.append(model)
-    #     subModelState = model.getSymbolicState()
-    #     for state in subModelState:
-    #         if not (state in self._stateSymb):
-    #             self._stateSymb.append(state)
-    #
-    #     self._computeSymbolicModel()
-    #     self._computeSymbolicJacobian()
-    #
-    #     return
-
-    # def removeAllSubmodels(self):
-    #     self._stateSymbSubModels = []
-    #     self._subModels = []
-    #     self.defineSymbolicState(self._originalStateSymb)
-    #     return
-
-
-    # def removeSubmodel(self, remModel):
-    #     if remModel in self._subModels:
-    #         self._subModels.remove(remModel)
-    #
-    #         remModelStates = remModel.getSymbolicState()
-    #         for remModelState in remModelStates:
-    #             remove_state = True
-    #             if remModelState in self._originalStateSymb: # The state is part of the original state vector
-    #                 break # doesn't need to be removed
-    #
-    #             for subm in self._subModels:
-    #                 if remModelState in subm._originalStateSymb:
-    #                     remove_state = False
-    #                     break
-    #
-    #             if remove_state:
-    #                 self._originalStateSymb.remove(remModelState)
-    #
-    #     return
-
-    # def removeSubModelByName(self, subModelName):
-    #     subModelToRemove = None
-    #     for subm in self._subModels:
-    #         if subm.getName() == subModelName:
-    #             subModelToRemove = subm
-    #             break
-    #
-    #     if subModelToRemove is not None:
-    #         self.removeSubmodel(subModelToRemove)
-    #
-    #     return
 
     def computeModelFromVector(self, X_vec, t_vec, params):
         """
@@ -288,7 +231,6 @@ class orbitalDynamicModelBase(dynamicModelBase):
     _usingSNC = False
     _usingDMC = False
     _DMCbeta = None
-    #_dmcModel = None
 
     def __init__(self, name, stateSymb, params):
         super(orbitalDynamicModelBase, self).__init__(name, stateSymb, params)
@@ -296,8 +238,6 @@ class orbitalDynamicModelBase(dynamicModelBase):
         self._usingSNC = False
         self._usingDMC = False
         self._DMCbeta = None
-        #nmbrOfStates = self.getNmbrOfStates()
-        #self._dmcModel = None
         return
 
     def useStateNoiseCompensation(self, useSNC, process_noise_frame = "INERTIAL"):
@@ -330,14 +270,10 @@ class orbitalDynamicModelBase(dynamicModelBase):
         if useDMC == True:
             self._usingSNC = False
             if self._usingDMC == False:
-                #dmcMod = dmcModel.getDynamicModel(beta)
                 self._usingDMC = True
                 self._DMCbeta = beta
                 w_x, w_y, w_z = sp.symbols('w_x w_y w_z')
                 self.defineSymbolicState(self._stateSymb + [w_x, w_y, w_z])
-                #nmbrOfStates = self.getNmbrOfStates()
-                #self.addSubmodel(dmcMod)
-                #self._dmcModel = dmcMod
         else: # useDMC == False
             if self._usingDMC == True:
                 self._usingDMC = False
@@ -346,8 +282,6 @@ class orbitalDynamicModelBase(dynamicModelBase):
                 self._stateSymb.pop()
                 self._DMCbeta = None
                 self.defineSymbolicState(self._stateSymb)
-                #self.removeSubModelByName("DMC")
-                #self._dmcModel = None
 
         return
 
@@ -385,14 +319,6 @@ class orbitalDynamicModelBase(dynamicModelBase):
         beta = self._DMCbeta
         Q_DMC = np.zeros((nmbrStates, nmbrStates))
 
-        # Qww = np.zeros((3,3))
-        # Qwv = np.zeros((3,3))
-        # Qrr = np.zeros((3,3))
-        # Qvr = np.zeros((3,3))
-        # Qvv = np.zeros((3,3))
-        # Qwr = np.zeros((3,3))
-        # Q = np.zeros((nmbrStates, nmbrStates))
-
         for i in range(0,3):
             sigma_i_sq = Q_i_1[i,i]
             beta_i = beta[i]
@@ -413,36 +339,7 @@ class orbitalDynamicModelBase(dynamicModelBase):
             Q_DMC[3+i,-3+i] = sigma_i_sq * (1.0/(2*beta_i**2) * (1 + np.exp(-2*beta_i*delta_t)) - 1.0/(beta_i**2) * np.exp(-beta_i*delta_t))
             Q_DMC[-3+i,3+i] = Q_DMC[3+i,-3+i]
 
-        # Q[0:3,0:3] = Qrr
-        # Q[3:6,3:6] = Qvv
-        # Q[-3:,-3:] = Qww
-        # Q[0:3,3:6] = Qvr
-        # Q[3:6,0:3] = Qvr
-        # Q[0:3,-3:] = Qwr
-        # Q[-3:,0:3] = Qwr
-        # Q[3:6,-3:] = Qwv
-        # Q[-3:,3:6] = Qwv
-
         return Q_DMC
-
-
-    # def getProcessSTM(self, t_i_1, t_i):
-    #     """
-    #     Gets the Process Noise State Transition Matrix (PNSTM).
-    #     Assumes that the noise is added to acceleration.
-    #     Uses the constant-velocity approximation.
-    #     The PNSTM is nx3, where n is the number of states.
-    #     :param t_i_1: [double] Time i-1
-    #     :param t_i: [double] Time i
-    #     :return: The PNSTM between t_i_1 and t_i.
-    #     """
-    #     delta_t = t_i - t_i_1
-    #     # Process Noise Transition Matrix with constant velocity approximation
-    #     pnstm = np.zeros((self.getNmbrOfStates(), 3))
-    #     pnstm[0:3, :] = delta_t**2/2 * np.eye(3)
-    #     pnstm[3:6, :] = delta_t * np.eye(3)
-    #
-    #     return pnstm
 
     def transformCovariance(self, state, Q):
         """

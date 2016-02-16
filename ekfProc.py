@@ -4,108 +4,22 @@
 # Manuel F. Diaz Ramos
 #
 # This class implements an Extended Kalman Filter (EKF) processor.
+# It's an extension of the ckfProc class.
 # It relies on:
-# 1) A dynamical model which implements
-# the following interface:
-# computeModel(state, time, params)
-# computeJacobian(state, time, params)
-# getNmbrOfStates()
-# getParams()
-# getProcessSTM()
-# 2) An observation model which implements
-# the following interface:
-# computeModel(state, time, params)
-# computeJacobian(state, time, params)
-# getParams()
+# 1) A dynamical model which implements the interface dynamicModelBase.
+# 2) An observation model which implements the interface observerModelBase
 ######################################################
 
 import numpy as np
-import dynamicSimulator as dynSim
+from ckfProc import ckfProc
 
-class ekfProc :
+class ekfProc(ckfProc) :
     """
     Extended Kalman Filter Processor (EKF).
     """
 
     def __init__(self):
-
-        self._dynModel = None
-        self._obsModel = None
-        self._dynSim = None
-
-        self._Xref_0 = None
-        self._xbar_0 = None
-        self._Pbar_0 = None
-        self._t_0 = 0
-
-        self._t_i_1 = 0
-        self._Xref_i_1 = None
-        self._xhat_i_1 = None
-        self._Xhat_i_1 = None
-        self._P_i_1 = None
-
-        self._I = None
-
-        self._stm_i_1 = None
-
-        self._prefit_residual = None
-        self._postfit_residual = None
-
-        self._josephFormFlag = 0
-
-        return
-
-    # Factory method. Use this to get an instance!
-    @classmethod
-    def getExtendedKalmanFilterProc(cls, dynModel, obsModel):
-        """
-        Factory method to get an instantiation of the class.
-        :param dynModel: [dynamicModelBase] Object that implements a dynamic model interface.
-        :param obsModel: [observerModelBase] Object that implements an observer model interface.
-        :return:
-        """
-        proc = ekfProc()
-
-        obsModel.defineSymbolicState(dynModel.getSymbolicState()) # Redefines the state of the observer
-
-        proc._dynModel = dynModel
-        proc._obsModel = obsModel
-
-        proc._dynSim = dynSim.dynamicSimulator.getDynamicSimulator(dynModel)
-
-        return proc
-
-    def configureExtendedKalmanFilter(self, Xref_0, xbar_0, Pbar_0, t_0, joseph_flag):
-        """
-        Before computing the EKF solution, call this method.
-        :param Xref_0: [1-dimensional numpy array] Initial guess of the state.
-        :param xbar_0: [1-dimensional numpy array] Deviation from the initial guess (usually 0).
-        :param Pbar_0: [2-dimensional numpy array] A-priori covariance.
-        :param t_0: [double] Initial time.
-        :param joseph_flag: [boolean] Set to true to propagate the covariance using Joseph Formulation.
-        :return:
-        """
-        # Initial data
-        self._Xref_0 = Xref_0
-        self._xbar_0 = xbar_0
-        self._Pbar_0 = Pbar_0
-        self._t_0 = t_0
-
-        self._t_i_1 = t_0
-        self._Xref_i_1 = Xref_0
-        self._xhat_i_1 = xbar_0
-        self._Xhat_i_1 = Xref_0 + xbar_0
-        self._P_i_1 = Pbar_0
-
-        self._I = np.eye(self._dynModel.getNmbrOfStates())
-
-        self._stm_i_1 = self._I # STM matrix from t_0 to t_(i-1)
-
-        self._prefit_residual = None
-        self._postfit_residual = None
-
-        self._josephFormFlag = joseph_flag
-
+        super(ekfProc, self).__init__()
         return
 
     def computeNextEstimate(self, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, useEKF = True, Q_i_1 = None):
@@ -234,42 +148,3 @@ class ekfProc :
         # End observation processing
 
         return (Xhat, xhat, P, prefit_res, postfit_res)
-
-    # The following getters should be used after calling computeNextEstimate()
-    # Current state estimate
-    def getNonLinearEstimate(self) :
-        return self._Xhat_i_1
-
-    # Current deviation state estimate
-    def getDeviationEstimate(self) :
-        return self._xhat_i_1
-
-    def getReferenceState(self):
-        return self._Xref_i_1
-
-    # Current pre-fit residual
-    def getPreFitResidual(self):
-        return self._prefit_residual
-
-    # Current post-fit residual
-    def getPostFitResidual(self):
-        return self._postfit_residual
-
-    # Covariance matrix at current time
-    def getCovarianceMatrix(self):
-        return self._P_i_1
-
-    # STM from t0 to current time
-    def getSTM(self):
-        return self._stm_i_1
-
-    # Inversion method used
-    def _invert(self, matrix):
-        return np.linalg.inv(matrix)
-
-    def _computeCovariance(self, Htilde_i, K_i, Pbar_i, R_i):
-        if self._josephFormFlag == False:
-            return ((self._I - K_i.dot(Htilde_i)).dot(Pbar_i))
-        else: # Joseph Formulation
-            aux = (self._I - K_i.dot(Htilde_i))
-            return aux.dot(Pbar_i).dot(aux.T) + K_i.dot(R_i).dot(K_i.T)

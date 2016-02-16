@@ -39,9 +39,11 @@ class ckfProc :
         self._t_0 = 0
 
         self._t_i_1 = 0
-        self._Xref_i_1 = None
-        self._xhat_i_1 = None
+        self._Xref_i_1 = None   # Reference
+        self._xhat_i_1 = None   # Deviation estimate
+        self._Xhat_i_1 = None   # Non-linear estimate
         self._P_i_1 = None
+        self._Pbar_i_1 = None
 
         self._I = None
 
@@ -56,7 +58,7 @@ class ckfProc :
 
     # Factory method. Use this to get an instance!
     @classmethod
-    def getCkfProc(cls, dynModel, obsModel):
+    def getFilter(cls, dynModel, obsModel):
         """
         Factory method to get an instantiation of the class.
         :param dynModel: [dynamicModelBase] Object that implements a dynamic model interface.
@@ -65,6 +67,8 @@ class ckfProc :
         """
         proc = ckfProc()
 
+        obsModel.defineSymbolicState(dynModel.getSymbolicState()) # Redefines the state of the observer
+
         proc._dynModel = dynModel
         proc._obsModel = obsModel
 
@@ -72,7 +76,7 @@ class ckfProc :
 
         return proc
 
-    def configureCkf(self, Xref_0, xbar_0, Pbar_0, t_0, joseph_flag):
+    def configureFilter(self, Xref_0, xbar_0, Pbar_0, t_0, joseph_flag):
         """
         Before computing the kalman solution, call this method.
         :param Xref_0: [1-dimensional numpy array] Initial guess of the state.
@@ -91,7 +95,9 @@ class ckfProc :
         self._t_i_1 = t_0
         self._Xref_i_1 = Xref_0
         self._xhat_i_1 = xbar_0
+        self._Xhat_i_1 = Xref_0 + xbar_0
         self._P_i_1 = Pbar_0
+        self._Pbar_i_1 = Pbar_0
 
         self._I = np.eye(self._dynModel.getNmbrOfStates())
 
@@ -154,11 +160,14 @@ class ckfProc :
         self._t_i_1 = t_i
         self._Xref_i_1 = Xref_i
         self._xhat_i_1 = xhat_i
+        self._Xhat_i_1 = Xref_i + xhat_i
         self._P_i_1 = P_i
+        self._Pbar_i_1 = Pbar_i
         self._prefit_residual = y_i
         self._postfit_residual = y_i - Htilde_i.dot(xhat_i)
 
-        self._stm_i_1 = stm_i.dot(self._stm_i_1)
+        #self._stm_i_1 = stm_i.dot(self._stm_i_1)
+        self._stm_i_1 = stm_i # STM from t_(i-1) to t_i
 
         return xhat_i
 
@@ -183,8 +192,12 @@ class ckfProc :
         Xhat = np.zeros((nmbrObs, nmbrStates))
         Xref = np.zeros((nmbrObs, nmbrStates))
         P = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+        Pbar = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+        stm = np.zeros((nmbrObs, nmbrStates, nmbrStates))
         prefit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
         postfit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
+
+        self._t_i_1 = obs_time_vector[0]
 
         for i in range(0, nmbrObs): # Iteration for every observation
             t_i = obs_time_vector[i]
@@ -198,24 +211,86 @@ class ckfProc :
             self.computeNextEstimate(t_i, Y_i, obs_params[i], R, dt, rel_tol, abs_tol, Q_i)
             xhat[i, :] = self.getDeviationEstimate()
             Xhat[i, :] = self.getNonLinearEstimate()
-            Xref[i,:] = self.getReference()
+            Xref[i,:] = self.getReferenceState()
             P[i, :, :] = self.getCovarianceMatrix()
+            Pbar[i,:,:] = self.getAPrioriCovarianceMatrix()
             prefit_res[i,:] = self.getPreFitResidual()
             postfit_res[i,:] = self.getPostFitResidual()
+            stm[i,:,:] = self.getSTM()
         # End observation processing
 
-        return (Xhat, xhat, Xref, P, prefit_res, postfit_res)
+        return (Xhat, xhat, Xref, P, prefit_res, postfit_res, Pbar, stm)
+
+    def iterateSmoothedCKF(self, Xref_0, xbar_0, Pbar_0, t_0, joseph_flag, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, iterations, Q = None):
+
+        for i in range(0, iterations):
+            self.configureFilter(Xref_0, xbar_0, Pbar_0, t_0, joseph_flag)
+
+            self.processAllObservations(obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q)
+
+            (Xhat_ckf,
+             xhat_ckf,
+             Xref_ckf,
+             P_ckf,
+             prefit_ckf,
+             postfit_ckf,
+             Pbar_ckf,
+             stm_ckf) = self.processAllObservations(obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q)
+
+            (Xhat_smoothed, xhat_ckf_smoothed, P_ckf_smoothed) = self.getSmoothedSolution(Xref_ckf, xhat_ckf, P_ckf, Pbar_ckf, stm_ckf)
+
+            Xref_0 = Xref_0 + xhat_ckf_smoothed[0] # Updating initial guess
+
+            xbar_0 = xbar_0 - xhat_ckf_smoothed[0]
+
+        return
+
+
+    def getSmoothedSolution(self, Xref, xhat, P, Pbar, stm):
+        """
+        Smoother. Returns the smoothed solution using all the observations.
+        It's not suited for real time processing. It should use all the observations.
+        Use it after calling processAllObservations()
+        :param xhat:
+        :param P:
+        :param Pbar:
+        :param stm:
+        :return:
+        """
+        xhat_shape = np.shape(xhat)
+        obs_length = xhat_shape[0]
+        state_length = xhat_shape[1]
+
+        # Smoothing
+        l = obs_length - 1 # Smoothing using observations from 0 to l (the last one)
+        S = np.zeros((l, state_length, state_length))
+        xhat_smoothed = np.zeros((obs_length, state_length))
+        P_smoothed = np.zeros((obs_length,state_length, state_length))
+        Xhat_smoothed = np.zeros((obs_length, state_length))
+        xhat_smoothed[l,:] = xhat[l]
+        Xhat_smoothed[l,:] = Xref[l] + xhat[l]
+        P_smoothed[l,:,:] = P[l]
+        for k in range(l-1, -1, -1):
+            phi = stm[k+1]
+            S[k,:,:] = P[k].dot(phi.T).dot(np.linalg.inv(Pbar[k+1]))
+            xhat_smoothed[k,:] = xhat[k] + S[k].dot(xhat_smoothed[k+1] - phi.dot(xhat[k]))
+            P_smoothed[k,:,:] = P[k] + S[k].dot(P_smoothed[k+1] - Pbar[k+1]).dot(S[k].T)
+
+            Xhat_smoothed[k,:] = Xref[k] + xhat_smoothed[k]
+        # end for
+
+        return (Xhat_smoothed, xhat_smoothed, P_smoothed)
 
     # The following getters should be used after calling computeNextEstimate()
     # Current state estimate
     def getNonLinearEstimate(self) :
-        return (self._Xref_i_1 + self._xhat_i_1)
+        return self._Xhat_i_1
 
     # Current deviation state estimate
     def getDeviationEstimate(self) :
         return self._xhat_i_1
 
-    def getReference(self):
+    def getReferenceState(self):
         return self._Xref_i_1
 
     # Current pre-fit residual
@@ -230,7 +305,11 @@ class ckfProc :
     def getCovarianceMatrix(self):
         return self._P_i_1
 
-    # STM from t0 to current time
+    # A-priori covariance matrix (before processing observations) at current time
+    def getAPrioriCovarianceMatrix(self):
+        return self._Pbar_i_1
+
+    # STM from t_(i-1) to current time
     def getSTM(self):
         return self._stm_i_1
 
