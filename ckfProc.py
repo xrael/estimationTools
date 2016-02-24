@@ -65,7 +65,7 @@ class ckfProc :
         :param obsModel: [observerModelBase] Object that implements an observer model interface.
         :return:
         """
-        proc = ckfProc()
+        proc = cls()
 
         obsModel.defineSymbolicState(dynModel.getSymbolicState()) # Redefines the state of the observer
 
@@ -323,3 +323,27 @@ class ckfProc :
         else: # Joseph Formulation
             aux = (self._I - K_i.dot(Htilde_i))
             return aux.dot(Pbar_i).dot(aux.T) + K_i.dot(R_i).dot(K_i.T)
+
+
+    def choleskyInversion(self, mat):
+        """
+        Implements the Cholesky inversion of a positive-definite matrix.
+        :param mat: [2-dimensional numpy array] Matrix to invert.
+        :return:
+        """
+        L = np.linalg.cholesky(mat) # Lower triangular
+        R = L.T
+
+        dim = mat.shape[0] # Square-matrix assumed
+
+        S = np.zeros([dim, dim])
+        for i in range(0, dim):
+            S[i,i] = 1.0/R[i,i]
+
+            for j in range(i+1, dim):
+                aux = 0
+                for k in range(i, j):
+                    aux -= S[i,k]*R[k,j]
+                S[i,j] = aux/R[j,j]
+
+        return S.dot(S.T)

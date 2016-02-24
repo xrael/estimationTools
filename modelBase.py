@@ -137,6 +137,20 @@ class modelBase:
 
         return output
 
+    def computeModelFromManyStates(self, X, t, params):
+
+        nmbrStates = self.getNmbrOfStates()
+        nmbrOutputs = self.getNmbrOutputs()
+        nmbrStateVecs = X.size/nmbrStates
+        output = np.zeros(nmbrStateVecs*nmbrOutputs)
+
+        for i in range(0, nmbrStateVecs):
+            x = X[i*nmbrStates:(i+1)*nmbrStates]
+            out = self.computeModel(x, t, params)
+            output[i*nmbrOutputs:(i+1)*nmbrOutputs] = out
+
+        return output
+
     def getParameters(self):
         """
         Returns the constant parameters.
@@ -207,6 +221,11 @@ class dynamicModelBase(modelBase):
         :return: [lambda func] A function to compute [F(X,t), STM].
         """
         F = lambda X, t, params: self.computeModelPlusSTMFunction(X, t, params)
+        return F
+
+    def getModelFromManyStatesFunction(self):
+
+        F = lambda X, t, params: self.computeModelFromManyStates(X, t, params)
         return F
 
 
@@ -414,158 +433,3 @@ class observerModelBase(modelBase):
     """
     @abstractmethod
     def isObservable(self, X, t, params): pass
-
-
-# class dmcModel(dynamicModelBase):
-#
-#     ## Constructor: DO NOT USE IT!
-#     def __init__(self, name, stateSymb, params):
-#         super(dmcModel, self).__init__(name, stateSymb, params)
-#
-#         return
-#
-#     @classmethod
-#     def getDynamicModel(cls, B):
-#         """
-#         Factory method. Use it to get an instance of the class.
-#         :param B:
-#         :return: An dmcModel object
-#         """
-#         params = (B,)
-#         name = "DMC" # DO NOT CHANGE IT!
-#         symbState = dmcModel.buildSymbolicState()
-#         dmc = dmcModel(name, symbState, params)
-#
-#         return dmc
-#
-#     @classmethod
-#     def buildSymbolicState(cls):
-#         """
-#         State vector for DMC.
-#         :return: A list with the symbolic symbols of the state.
-#         """
-#         x, y, z = sp.symbols('x, y, z')
-#         x_dot, y_dot, z_dot = sp.symbols('x_dot y_dot z_dot')
-#         w_x, w_y, w_z = sp.symbols('w_x, w_y, w_z')
-#         X_symb = [x, y, z, x_dot, y_dot, z_dot, w_x, w_y, w_z]
-#         return X_symb
-#
-#     def computeModel(self, X, t, params):
-#         """
-#         Computes the dynamic function F(X,t)
-#         :param X: State.
-#         :param t: Time.
-#         :param params: parameters used by the function.
-#         :return: The result of the function in a vector with the same size than X.
-#         """
-#         v_x = X[3]
-#         v_y = X[4]
-#         v_z = X[5]
-#         w_x = X[6]
-#         w_y = X[7]
-#         w_z = X[8]
-#         B = self._params[0]
-#
-#         nmbrOfStates = self.getNmbrOfStates()
-#
-#         F = np.zeros(nmbrOfStates)
-#
-#         F[3] = v_x
-#         F[4] = v_y
-#         F[5] = v_z
-#         F[6] = -B[0]*w_x
-#         F[7] = -B[1]*w_y
-#         F[8] = -B[2]*w_z
-#
-#         # for i in range(0, nmbrOfStates):
-#         #     F[i] = self._modelLambda[i](w_x, w_y, w_z, [B])
-#
-#         return F
-#
-#     # Returns A matrix
-#     # This is application-specific. It depends on how state vector is defined.
-#     def computeJacobian(self, X, t, params):
-#         """
-#         Computes the Jacobian of the dynamic function
-#         :param X: State
-#         :param t: time
-#         :param params: parameters used by the model
-#         :return:
-#         """
-#         w_x = X[6]
-#         w_y = X[7]
-#         w_z = X[8]
-#         B = self._params[0]
-#
-#         nmbrOfStates = self.getNmbrOfStates()
-#         A = np.zeros([nmbrOfStates,nmbrOfStates])
-#
-#         A
-#
-#         for i in range(0,nmbrOfStates):
-#             for j in range(0,nmbrOfStates):
-#                 A[i][j] = self._jacobianLambda[i][j](w_x, w_y, w_z, [B])
-#
-#         return np.diag(B)
-#
-#     ## -------------------------Private Methods--------------------------
-#     def _computeSymbolicModel(self):
-#         """
-#
-#         :return:
-#         """
-#         x = self._stateSymb[0]
-#         y = self._stateSymb[1]
-#         z = self._stateSymb[2]
-#         x_dot = self._stateSymb[3]
-#         y_dot = self._stateSymb[4]
-#         z_dot = self._stateSymb[5]
-#         w_x = self._stateSymb[6]
-#         w_y = self._stateSymb[7]
-#         w_z = self._stateSymb[8]
-#
-#         B = sp.symarray('B', 3)
-#
-#         self._modelSymb = [0, 0, 0, w_x, w_y, w_z, -B[0]*w_x,  -B[1]*w_y,  -B[2]*w_z]
-#
-#         nmbrOfStates = self.getNmbrOfStates()
-#
-#         self._modelLambda = [0 for i in range(0, nmbrOfStates)]
-#         for i in range(0, nmbrOfStates):
-#             self._modelLambda[i] = sp.lambdify((w_x, w_y, w_z, [B]), self._modelSymb[i], "numpy")
-#
-#         return self._modelSymb
-#
-#     def _computeSymbolicJacobian(self):
-#         """
-#
-#         :return:
-#         """
-#         x = self._stateSymb[0]
-#         y = self._stateSymb[1]
-#         z = self._stateSymb[2]
-#         x_dot = self._stateSymb[3]
-#         y_dot = self._stateSymb[4]
-#         z_dot = self._stateSymb[5]
-#         w_x = self._stateSymb[6]
-#         w_y = self._stateSymb[7]
-#         w_z = self._stateSymb[8]
-#
-#         B = sp.symarray('B', 3)
-#
-#         nmbrOfStates = self.getNmbrOfStates()
-#
-#         F = [0 for i in range(0, nmbrOfStates)]
-#         dF = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
-#         A_lambda = [[0 for i in range(0, nmbrOfStates)] for i in range(0, nmbrOfStates)]
-#
-#         for i in range(0, nmbrOfStates) :
-#             F[i] = self._modelSymb[i]
-#             for j in range(0, nmbrOfStates) :
-#                 dF[i][j] = sp.diff(F[i], self._stateSymb[j])
-#                 A_lambda[i][j] = sp.lambdify((w_x, w_y, w_z, [B]), dF[i][j], "numpy")
-#
-#         self._jacobianSymb = dF
-#         self._jacobianLambda = A_lambda
-#
-#         return self._jacobianSymb

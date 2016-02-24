@@ -19,7 +19,7 @@ class ekfProc(ckfProc) :
     """
 
     def __init__(self):
-        super(ekfProc, self).__init__()
+        ckfProc.__init__(self)
         return
 
     def computeNextEstimate(self, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, useEKF = True, Q_i_1 = None):

@@ -76,13 +76,28 @@ class dynamicSimulator:
         tf = (num - 1) * dt + t0 # includes the last value
         time = np.linspace(t0, tf, num)
 
-        #params = self._dynModel.getParameters()
         modelFunc = self._dynModel.getModelFunction()
 
         self._statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
         self._timeVec = time
 
         return (self._timeVec, self._statesVec)
+
+    def propagateManyStateVectors(self, initialState, params, t0, dt, tf, rtol, atol):
+
+        num = int((tf - t0)/dt) + 1
+        tf = (num - 1) * dt + t0 # includes the last value
+        time = np.linspace(t0, tf, num)
+
+        modelFunc = self._dynModel.getModelFromManyStatesFunction()
+
+        statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
+        timeVec = time
+
+        final_state = statesVec[-1]
+
+        return (timeVec, statesVec, final_state)
+
 
     def propagateWithSTM(self, initial_state, initial_stm, params, t0, dt, tf, rtol, atol):
         """
