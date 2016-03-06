@@ -15,6 +15,7 @@ import sympy as sp
 # computeModel(): Returns the result of the dynamic function F(X,t)
 # computeJacobian(): Returns the Jacobian of F evaluated at X,t.
 # getNmbrOfOutputs(): Return the number of outputs of the function.
+# computeTimeDependentParameters(): Computes the time dependent parameters that can be an input to computeModel() and computeJacobian().
 #
 # getModelFunction(): Returns a function that permits computing F(X,t).
 # getSymbolicModel(): Returns a sympy object with the symbolic model.
@@ -22,6 +23,8 @@ import sympy as sp
 # getName(): Returns the name of the model.
 # defineSymbolicState(): Redefines the state.
 # computeModelFromVector(): Computes the model using a vector of states and a time vector.
+# computeModelFromManyStates(): Computes the the model using many states stacked in a single vector for the same time.
+# getModelFromManyStatesFunction(): Returns a lambda function pointing to computeModelFromManyStates().
 # getNmbrOfStates(): Return the number of states.
 # getParameters(): Returns the constant parameters used by F.
 ######################################################
@@ -39,13 +42,21 @@ class modelBase:
     _jacobianLambda = None
     _stateSymb = None
     _name = ""
+    _computeModelFunc = None
+    _computeModelFromManyStatesFunc = None
+    _computeModelPlusSTMFunc = None
+    _propFunction = None
     ##------------------------------------------
 
-    def __init__(self, name, stateSymb, params):
+    def __init__(self, name, stateSymb, params, propagationFunction = 'F'):
         """
         Constructor.
         :param stateSymb: [List with sympy expressions] Symbolic description of the state (List with symbolic expressions).
         :param params: [tuple] Static parameters used by the model.
+        :param propagationFunction: Chooses the function to use to propagate. Options:
+        'F': the function F(X,t).
+        'F_vector': propagates many vectors at the same time.
+        'F_plus_STM': propagates F(X,t) and the STM.
         :return:
         """
         self._name = name
@@ -53,6 +64,20 @@ class modelBase:
         self._params = params
         self._computeSymbolicModel()
         self._computeSymbolicJacobian()
+        self._computeModelFunc = lambda X, t, params : self.computeModel(X, t, params)
+        self._computeModelFromManyStatesFunc = lambda X, t, params: self.computeModelFromManyStates(X, t, params)
+        self._computeModelPlusSTMFunc =  lambda X, t, params: self.computeModelPlusSTMFunction(X, t, params)
+
+        # Function used for propagation (used by dynamicSimulator)
+        if propagationFunction == 'F':
+            self._propFunction = lambda X, t, params : self._computeModelFunc(X, t, self.computeTimeDependentParameters(t) + params)
+        elif propagationFunction == 'F_vector':
+            self._propFunction = lambda X, t, params : self._computeModelFromManyStatesFunc(X, t, self.computeTimeDependentParameters(t) + params)
+        elif propagationFunction == 'F_plus_STM':
+            self._propFunction = lambda X, t, params : self._computeModelPlusSTMFunc(X, t, self.computeTimeDependentParameters(t) + params)
+        else: # Default
+            self._propFunction = lambda X, t, params : self._computeModelFunc(X, t, self.computeTimeDependentParameters(t) + params)
+
         return
 
     ## ------------------------Public Interface---------------------------
@@ -82,13 +107,16 @@ class modelBase:
     @abstractmethod
     def getNmbrOutputs(self): pass
 
-    def getModelFunction(self):
-        """
-        Returns a Lambda function to numerically compute the function model.
-        :return: [Lambda func] A function to compute F(X,t).
-        """
-        F = lambda X, t, params : self.computeModel(X, t, params)
-        return F
+    """
+    Computes extra time-dependent parameters that the model needs.
+    It's useful to compute parameters that depend on time only once and pass them to computeModel() and computeJacobian()
+    instead of computing the parameters twice.
+    OVERRIDE IF THE MODEL HAS TIME-DEPENDENT PARAMETERS.
+    :param t: [double] Current time.
+    :return: [tuple] A tuple with the parameters. This tuple can be inputed into computeModel() and computeJacobian().
+    """
+    def computeTimeDependentParameters(self, t):
+        return () # OVERRIDE IF THE MODEL HAS TIME-DEPENDENT PARAMETERS.
 
     def getSymbolicModel(self):
         """
@@ -129,16 +157,20 @@ class modelBase:
         :return: [2-dimension numpy array] A matrix (p x dim(F(X,t))) with the outputs.
         """
         nmbrPoints = t_vec.size
-
         output = np.zeros((nmbrPoints, self.getNmbrOutputs()))
-
         for i in range(0, nmbrPoints):
             output[i] = self.computeModel(X_vec[i], t_vec[i], params)
 
         return output
 
     def computeModelFromManyStates(self, X, t, params):
-
+        """
+        Computes the output of a model stacking several states
+        :param X: [1-dimensional numpy array] Several states stacked into a single 1-dimensional array.
+        :param t: [double] Time.
+        :param params: [tuple] extra parameters.
+        :return: [1-dimensional numpy array] The stacked output.
+        """
         nmbrStates = self.getNmbrOfStates()
         nmbrOutputs = self.getNmbrOutputs()
         nmbrStateVecs = X.size/nmbrStates
@@ -150,6 +182,54 @@ class modelBase:
             output[i*nmbrOutputs:(i+1)*nmbrOutputs] = out
 
         return output
+
+    def computeModelPlusSTMFunction(self, X, t, params):
+        """
+        Computes the function [F(X,t), STM] which is useful for propagating X and the STM in
+        [X_dot, STM_dot] = [F(X,t), STM]
+        :param X: [1-dimension numpy array] State.
+        :param t: [double] Time.
+        :param params: [tuple] Variable parameters.
+        :return: [1-dimension numpy array] The output of [F(X,t), STM] in a vector.
+        """
+        dX = self.computeModel(X, t, params)
+        A = self.computeJacobian(X, t, params)
+
+        nmbrStates = self.getNmbrOfStates()
+        for i in range(0, nmbrStates):  # loop for each STM column vector (phi)
+            phi = X[(nmbrStates + nmbrStates*i):(nmbrStates + nmbrStates + nmbrStates*i):1]
+            dphi = A.dot(phi)
+            dX = np.concatenate([dX, dphi])
+
+        return dX
+
+    def getModelFunction(self):
+        """
+        Returns a Lambda function to numerically compute the function model.
+        :return: [Lambda func] A function to compute F(X,t).
+        """
+        return self._computeModelFunc
+
+    def getModelPlusSTMFunction(self):
+        """
+        Returns a Lambda function with the function [F(X,t), STM].
+        :return: [lambda func] A function to compute [F(X,t), STM].
+        """
+        return self._computeModelPlusSTMFunc
+
+    def getModelFromManyStatesFunction(self):
+        """
+        Returns a lambda function with the method computeModelFromManyStates().
+        :return:
+        """
+        return self._computeModelFromManyStatesFunc
+
+    def getPropagationFunction(self):
+        """
+        Returns the function to be used for propagation.
+        :return:
+        """
+        return  self._propFunction
 
     def getParameters(self):
         """
@@ -187,46 +267,12 @@ class dynamicModelBase(modelBase):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, stateSymb, params):
-        super(dynamicModelBase, self).__init__(name, stateSymb, params)
+    def __init__(self, name, stateSymb, params, propagationFunction):
+        super(dynamicModelBase, self).__init__(name, stateSymb, params, propagationFunction)
         return
 
     def getNmbrOutputs(self):
         return self.getNmbrOfStates() # it's the same for a dynamical model!
-
-    def computeModelPlusSTMFunction(self, X, t, params):
-        """
-        Computes the function [F(X,t), STM] which is useful for propagating X and the STM in
-        [X_dot, STM_dot] = [F(X,t), STM]
-        :param X: [1-dimension numpy array] State.
-        :param t: [double] Time.
-        :param params: [tuple] Variable parameters.
-        :return: [1-dimension numpy array] The output of [F(X,t), STM] in a vector.
-        """
-        dX = self.computeModel(X, t, params)
-        A = self.computeJacobian(X, t, params)
-
-        nmbrStates = self.getNmbrOfStates()
-
-        for i in range(0, nmbrStates):  # loop for each STM column vector (phi)
-            phi = X[(nmbrStates + nmbrStates*i):(nmbrStates + nmbrStates + nmbrStates*i):1]
-            dphi = A.dot(phi)
-            dX = np.concatenate([dX, dphi])
-
-        return dX
-
-    def getModelPlusSTMFunction(self):
-        """
-        Returns a Lambda function with the function [F(X,t), STM].
-        :return: [lambda func] A function to compute [F(X,t), STM].
-        """
-        F = lambda X, t, params: self.computeModelPlusSTMFunction(X, t, params)
-        return F
-
-    def getModelFromManyStatesFunction(self):
-
-        F = lambda X, t, params: self.computeModelFromManyStates(X, t, params)
-        return F
 
 
 ######################################################
@@ -251,8 +297,8 @@ class orbitalDynamicModelBase(dynamicModelBase):
     _usingDMC = False
     _DMCbeta = None
 
-    def __init__(self, name, stateSymb, params):
-        super(orbitalDynamicModelBase, self).__init__(name, stateSymb, params)
+    def __init__(self, name, stateSymb, params, propagationFunction):
+        super(orbitalDynamicModelBase, self).__init__(name, stateSymb, params, propagationFunction)
         self._process_noise_frame = "INERTIAL"
         self._usingSNC = False
         self._usingDMC = False
@@ -333,6 +379,13 @@ class orbitalDynamicModelBase(dynamicModelBase):
         return pntm_i.dot(Q_rot).dot(pntm_i.T)
 
     def getSmcCovarianceMatrix(self, t_i_1, t_i, Q_i_1):
+        """
+        Computes the SMC covariance using the constant-velocity approximation.
+        :param t_i_1:
+        :param t_i:
+        :param Q_i_1:
+        :return:
+        """
         nmbrStates = self.getNmbrOfStates()
         delta_t = t_i - t_i_1
         beta = self._DMCbeta
@@ -407,7 +460,7 @@ class observerModelBase(modelBase):
     ##------------------------------------------
 
     def __init__(self, name, stateSymb, params, observerCoordinates):
-        super(observerModelBase, self).__init__(name, stateSymb, params)
+        super(observerModelBase, self).__init__(name, stateSymb, params, propagationFunction = 'F') # Observer models just use the model function 'G'
 
         self._nmbrCoordinates = observerCoordinates.shape[0]
         self._observerCoordinates = observerCoordinates

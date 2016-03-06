@@ -13,6 +13,7 @@
 
 import numpy as np
 import dynamicSimulator as dynSim
+import orthogonalTransformations as orTrans
 
 class batchProc :
     
@@ -262,7 +263,7 @@ class batchProc :
         
     def solveNormalEq(self, infoMat, normalMat) :
         #return np.linalg.inv(infoMat).dot(normalMat)
-        return self.choleskyAlgorithm(infoMat, normalMat)
+        return orTrans.choleskyAlgorithm(infoMat, normalMat)
 
     def iterateBatch(self) :
         """
@@ -286,57 +287,4 @@ class batchProc :
             return 1.0/matrix
         else:
             #return np.linalg.inv(matrix)
-            return self.choleskyInversion(matrix)
-
-    def choleskyAlgorithm(self, A, b) :
-        """
-        Solves a system A*x = b where A is positive-definite using the Cholesky algorithm.
-        :param A:  [2-dimensional numpy array] Matrix to invert.
-        :param b:  [1-dimensional numpy array] Vector.
-        :return: Solution of the linear system.
-        """
-        L = np.linalg.cholesky(A) # Lower triangular
-        R = L.T
-        
-        nmbrStates = np.size(b)
-        
-        z = np.zeros(nmbrStates)
-        for i in range(0, nmbrStates):
-            aux = 0
-            for j in range(0, i):
-                aux += R[j,i] * z[j]
-            z[i] = (b[i] - aux)/R[i,i]
-            
-        x = np.zeros(nmbrStates)
-        for i in range(nmbrStates-1, -1, -1):
-            aux = 0
-            for j in range(i, nmbrStates):
-                aux += R[i,j] * x[j]
-            x[i] = (z[i] - aux)/R[i,i]
-        
-        return x
-
-    def choleskyInversion(self, mat):
-        """
-        Implements the Cholesky inversion of a positive-definite matrix.
-        :param mat: [2-dimensional numpy array] Matrix to invert.
-        :return:
-        """
-        L = np.linalg.cholesky(mat) # Lower triangular
-        R = L.T
-        
-        dim = mat.shape[0] # Square-matrix assumed
-
-        S = np.zeros([dim, dim])        
-        for i in range(0, dim):
-            S[i,i] = 1.0/R[i,i]
-            
-            for j in range(i+1, dim):
-                aux = 0
-                for k in range(i, j):
-                    aux -= S[i,k]*R[k,j]
-                S[i,j] = aux/R[j,j]
-                
-        return S.dot(S.T)
-                    
-            
+            return orTrans.choleskyInversion(matrix)

@@ -76,7 +76,7 @@ class dynamicSimulator:
         tf = (num - 1) * dt + t0 # includes the last value
         time = np.linspace(t0, tf, num)
 
-        modelFunc = self._dynModel.getModelFunction()
+        modelFunc = self._dynModel.getPropagationFunction()
 
         self._statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
         self._timeVec = time
@@ -89,7 +89,7 @@ class dynamicSimulator:
         tf = (num - 1) * dt + t0 # includes the last value
         time = np.linspace(t0, tf, num)
 
-        modelFunc = self._dynModel.getModelFromManyStatesFunction()
+        modelFunc = self._dynModel.getPropagationFunction()
 
         statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
         timeVec = time
@@ -102,7 +102,7 @@ class dynamicSimulator:
     def propagateWithSTM(self, initial_state, initial_stm, params, t0, dt, tf, rtol, atol):
         """
         Simulate the model X_dot = F(X,t), propagating X(t) and the State Transition Matrix (STM).
-        The STM equation is STM_dot = A(t)*STM, where A(t) is the
+        The STM equation is STM_dot = A(t)*STM, where A(t) is the Jacobian of F.
         :param initialState: Initial state conditions.
         :param initial_stm: Initial STM conditions.
         :param params: Variable parameters for the dynamic model.
@@ -122,7 +122,8 @@ class dynamicSimulator:
         stm_length = initial_stm.size
         total_length = state_length + stm_length
 
-        modelPlusSTMFunc = self._dynModel.getModelPlusSTMFunction()
+        modelPlusSTMFunc = self._dynModel.getPropagationFunction()
+        #modelPlusSTMFunc = self._dynModel.getModelPlusSTMFunction()
 
         X0 = np.concatenate([initial_state, initial_stm.T.reshape(stm_length)]) # STM reshaped by columns
         X = odeint (modelPlusSTMFunc, X0, timeVec, args = (params,), rtol = rtol, atol = rtol)
@@ -141,4 +142,44 @@ class dynamicSimulator:
         states = X[:,0:state_length]
 
         return (states, stms, timeVec, final_state, final_stm)
+
+
+    def propagateWithSTMtimeVec(self, initial_state, initial_stm, params, time_vec, rtol, atol):
+        """
+        Simulate the model X_dot = F(X,t), propagating X(t) and the State Transition Matrix (STM).
+        The STM equation is STM_dot = A(t)*STM, where A(t) is the Jacobian of F.
+        This overload receives a time vector.
+        :param initialState: Initial state conditions.
+        :param initial_stm: Initial STM conditions.
+        :param params: Variable parameters for the dynamic model.
+        :param time_vec: Time vector.
+        :param rtol: Relative tolerance of the integrator.
+        :param atol: Absolute tolerance of the integrator.
+        :return:
+        """
+
+        state_length = initial_state.size
+        stm_shape = initial_stm.shape
+        stm_length = initial_stm.size
+        total_length = state_length + stm_length
+
+        modelPlusSTMFunc = self._dynModel.getPropagationFunction()
+
+        X0 = np.concatenate([initial_state, initial_stm.T.reshape(stm_length)]) # STM reshaped by columns
+        X = odeint (modelPlusSTMFunc, X0, time_vec, args = (params,), rtol = rtol, atol = rtol)
+
+        Xf = X[-1] # last state
+
+        final_state = Xf[0:state_length:1]
+
+        final_stm = Xf[state_length:total_length:1]
+        final_stm = final_stm.reshape(stm_shape).T
+
+        stms = np.zeros([X.shape[0], state_length, state_length])
+        for i in range(0, X.shape[0]) :
+            stms[i,:,:] = X[i,state_length:].reshape(stm_shape).T
+
+        states = X[:,0:state_length]
+
+        return (states, stms, time_vec, final_state, final_stm)
 
