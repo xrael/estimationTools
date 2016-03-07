@@ -20,9 +20,7 @@
 ######################################################
 
 import numpy as np
-import dynamicSimulator as dynSim
 from sequentialFilter import sequentialFilterProc
-import matplotlib.pyplot as plt
 
 class ckfProc(sequentialFilterProc) :
     """
@@ -79,8 +77,6 @@ class ckfProc(sequentialFilterProc) :
 
         self._I = np.eye(self._dynModel.getNmbrOfStates())
 
-        self._stm_i_1 = self._I # STM matrix from t_0 to t_(i-1)
-
         # Default iterations
         self._iteration = 0
         self._nmbrIterations = 1
@@ -105,13 +101,11 @@ class ckfProc(sequentialFilterProc) :
         """
         params = ()
 
-        print "Processing observation ", i
-
         if t_i == self._t_i_1:
-            stm_i = self._I
             Xref_i = self._Xref_i_1
             xbar_i = self._xhat_i_1
             Pbar_i = self._P_i_1
+            stm_ti_t0 = self._stm_i_1
         else:
             if refTrajectory is None: # Integrate
                 (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
@@ -155,8 +149,7 @@ class ckfProc(sequentialFilterProc) :
         self._prefit_residual = y_i
         self._postfit_residual = y_i - Htilde_i.dot(xhat_i)
 
-        #self._stm_i_1 = stm_i.dot(self._stm_i_1)
-        self._stm_i_1 = stm_i # STM from t_(i-1) to t_i
+        self._stm_i_1 = stm_ti_t0 # STM from t_(i-1) to t_0
 
         return
 
@@ -170,11 +163,7 @@ class ckfProc(sequentialFilterProc) :
         :param params: [tuple] model parameters. Usually not used.
         :return: The trajectory data in a tuple (reference + STMs)
         """
-        if self._t_i_1 < time_vec[0]: # Add the initial time if it's not part of the time vector
-            t_vec = np.concatenate((np.array([self._t_i_1]), time_vec))
-        else:
-            t_vec = np.copy(time_vec)
-        (states, stms, time, Xref_f, stm_f)  = self._dynSim.propagateWithSTMtimeVec(X_0, self._I, params, t_vec, rel_tol, abs_tol)
+        (states, stms, time, Xref_f, stm_f) = self._dynSim.propagateWithSTMtimeVec(X_0, self._I, params, time_vec, rel_tol, abs_tol)
         return (states, stms, time)
 
     def setNumberIterations(self, it):
@@ -298,8 +287,6 @@ class ckfProc(sequentialFilterProc) :
 
     # The following getters should be used after calling computeNextEstimate()
 
-
-
     # Current deviation state estimate
     def getDeviationEstimate(self) :
         return self._xhat_i_1
@@ -311,7 +298,7 @@ class ckfProc(sequentialFilterProc) :
     def getAPrioriCovarianceMatrix(self):
         return self._Pbar_i_1
 
-    # STM from t_(i-1) to current time
+    # STM from t_0 to current time
     def getSTM(self):
         return self._stm_i_1
 

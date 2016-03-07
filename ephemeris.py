@@ -64,14 +64,6 @@ def computeOrbitalElementsMeeus(a_L, a_a, a_e, a_i, a_raan, a_longPeriapse, JD, 
     argPeriapse = argPeriapse%(2*np.pi)
     nu = nu%(2*np.pi)
 
-    # print "a=", a
-    # print "e=", e
-    # print "i=", np.rad2deg(i)
-    # print "raan=", np.rad2deg(raan)
-    # print "longPeriapse=", np.rad2deg(longPeriapse)
-    # print "mean_longitude=", np.rad2deg(mean_longitude)
-    # print "nu=", np.rad2deg(nu)
-
     return (a, e, i, raan, argPeriapse, nu)
 
 def JDCenturiesFromJ2000(JD):

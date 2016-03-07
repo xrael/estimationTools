@@ -105,10 +105,10 @@ class srifProc(sequentialFilterProc) :
         p = Y_i.size
 
         if t_i == self._t_i_1:
-            Xref_i = np.copy(self._Xref_i_1)
-            Rbar_i = np.copy(self._R_i_1)
-            bbar_i = np.copy(self._b_i_1)
-            stm_ti_t0 = np.copy(self._stm_i_1)
+            Xref_i = self._Xref_i_1
+            Rbar_i = self._R_i_1
+            bbar_i = self._b_i_1
+            stm_ti_t0 = self._stm_i_1
         else:
             if refTrajectory is None: # Integrate
                 (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
@@ -121,7 +121,7 @@ class srifProc(sequentialFilterProc) :
                 stm_i = stm_ti_t0.dot(np.linalg.inv(stm_ti_1_t0)) # STM(t_i, t_i_1)
 
             # Time Update
-            bbar_i = np.copy(self._b_i_1)
+            bbar_i = self._b_i_1
             Rbar_i = self._R_i_1.dot(np.linalg.inv(stm_i))
             #Rbar_i = orTrans.householderTransformation(Rbar_i)
 
@@ -153,12 +153,10 @@ class srifProc(sequentialFilterProc) :
         # for i in range(0, n+1):
         #     print np.linalg.norm(A[:,i])
 
-        self._R_i_1 = np.copy(A[0:n,0:n])
-        self._b_i_1 = np.copy(A[0:n,-1])
+        self._R_i_1 = A[0:n,0:n]
+        self._b_i_1 = A[0:n,-1]
 
         self._xhat_i_1 = orTrans.backwardsSubstitution(self._R_i_1, self._b_i_1)
-        #self._xhat_i_1 = np.linalg.inv(self._R_i_1).dot(self._b_i_1)
-        #print self._R_i_1.dot(self._xhat_i_1) - self._b_i_1
         self._Xhat_i_1 = Xref_i + self._xhat_i_1         # Non-linear estimate
 
         self._t_i_1 = t_i
@@ -190,7 +188,7 @@ class srifProc(sequentialFilterProc) :
         R_o = orTrans.backwardsSubstitutionInversion(L)
         return (R_o, Q)
 
-    def integrateAllBatch(self, X_0, time_vec, rel_tol, abs_tol, params):
+    def integrate(self, X_0, time_vec, rel_tol, abs_tol, params):
         """
         Integrate th whole batch. Possible for the SRIF since the reference trajectory does not change.
         :param X_0: [1-dimension numpy array] Initial state at t_0.
@@ -200,12 +198,38 @@ class srifProc(sequentialFilterProc) :
         :param params: [tuple] model parameters. Usually not used.
         :return: The trajectory data in a tuple (reference + STMs)
         """
-        if self._t_i_1 < time_vec[0]: # Add the initial time if it's not part of the time vector
-            t_vec = np.concatenate((np.array([self._t_i_1]), time_vec))
-        else:
-            t_vec = np.copy(time_vec)
-        (states, stms, time, Xref_f, stm_f)  = self._dynSim.propagateWithSTMtimeVec(X_0, self._I, params, t_vec, rel_tol, abs_tol)
+        (states, stms, time, Xref_f, stm_f) = self._dynSim.propagateWithSTMtimeVec(X_0, self._I, params, time_vec, rel_tol, abs_tol)
         return (states, stms, time)
+
+    def propagateForward(self, tf, dt, rel_tol, abs_tol, params):
+        if tf < self._t_i_1:
+            return
+        else:
+            num = int((tf - self._t_i_1))/dt + 1
+            tf = (num - 1) * dt + self._t_i_1 # includes the last value
+            time_vec = np.linspace(self._t_i_1, tf, num)
+            (states, stms, time, Xref_f, stm_f) = self._dynSim.propagateWithSTMtimeVec(self._Xref_i_1, self._stm_i_1, params, time_vec, rel_tol, abs_tol)
+
+            nmbrStates = self._dynModel.getNmbrOfStates()
+
+            Xhat_vec_prop = np.zeros((num, nmbrStates))
+            xhat_vec_prop = np.zeros((num, nmbrStates))
+            P_vec_prop = np.zeros((num, nmbrStates, nmbrStates))
+            for i in range(0, num):
+                stm_ti_tobs = stms[i].dot(np.linalg.inv(self._stm_i_1)) # STM from the propagation initial time to ti
+                xhat_vec_prop[i,:] = stm_ti_tobs.dot(self._xhat_i_1)
+                Xhat_vec_prop[i,:] = states[i] + xhat_vec_prop[i]
+                P_vec_prop[i,:,:] = stm_ti_tobs.dot(self._P_i_1.dot(stm_ti_tobs.T))
+
+            self._Xref_i_1 = Xref_f
+            stm_tf_ti = stm_f.dot(np.linalg.inv(self._stm_i_1)) # STM from the propagation initial time to tf
+            self._stm_i_1 = stm_f
+            self._xhat_i_1 = stm_tf_ti.dot(self._xhat_i_1)
+            self._Xhat_i_1 = self._Xref_i_1 + self._xhat_i_1
+            self._P_i_1 = stm_tf_ti.dot(self._P_i_1.dot(stm_tf_ti.T))
+            self._t_i_1 = tf
+            return (Xhat_vec_prop, xhat_vec_prop, P_vec_prop, time_vec)
+
 
     def setNumberIterations(self, it):
         """

@@ -251,3 +251,114 @@ def orbitalElements2PositionVelocity(mu, a, e, i, raan, w, nu):
         ret = 2 # The orbit is parabolic
 
     return (r_vec, v_vec, ret)
+
+def positionVelocity2OrbitalElements(mu, r_vec, v_vec):
+    ret = 0
+    x_vec = np.array([1.0, 0.0, 0.0]) # Unit inertial x-vector
+    z_vec = np.array([0.0, 0.0, 1.0]) # Unit inertial z-vector
+
+    # Angular momentum
+    h_vec = np.cross(r_vec, v_vec)
+    h = np.linalg.norm(h_vec)
+    if h < 1e-6:
+        #Degenerate orbit
+        return 4 # Degenerate orbit
+
+    r = np.linalg.norm(r_vec)
+    v = np.linalg.norm(v_vec)
+
+    # Line of ascending node
+    n_vec = np.cross(z_vec, h_vec)
+    n = np.linalg.norm(n_vec)
+
+    # Energy
+    E = np.square(v)/2 - mu/r
+    if E >= 0:
+        ret = 3 # The orbit is either parabolic or hyperbolic
+    else:
+        ret = 0 # Ellyptical orbit default
+
+    e_vec = np.cross(v_vec, h_vec)/mu - r_vec/r
+    e = np.linalg.norm(e_vec)
+
+    if np.abs(E) < ENERGY_THRES:
+        a = 0 # not defined
+        p = h**2/mu
+        e = 1.0
+        ret = 2 # The orbit is parabolic
+    else:
+        # Orbit shape
+        a = -mu/(2*E)              # Semi-major axis
+        p = a*(1-e**2)             # Semi-latus rectum
+
+    # Inclination
+    i = np.arccos(h_vec[2]/h) # returns angles between 0 and pi
+
+    # True Longitude: angle between x_inertial and r_vec
+    lambd = np.arccos(np.dot(x_vec, r_vec)/r)
+    if r_vec[1] < 0: # lambda > 180 deg
+        lambd = 2*np.pi - lambd
+
+    if i < INCLINATION_THRES: # (i ~ 0) less than 0.1'
+        # Equatorial orbit
+        # not defined for any equatorial orbit:
+        raan = 0.0        # Right Ascension of Ascending Node
+        w = 0.0           # Argument of Periapsis
+        u = 0.0           # Argument of Latitude
+        if e < ECCENTRICITY_THRES:
+            #Equatorial circular orbit: line of nodes and periapsis not defined.
+            w_true = 0.0  # True Argument of Periapsis
+            nu = 0.0      # True Anomaly
+            ret = 1
+        else:
+            #Equatorial non-circular orbit: line of nodes not defined.
+
+            # True Argument of Periapsis
+            w_true = np.arccos(np.dot(x_vec, e_vec)/e)
+            if e_vec[1] < 0:
+                w_true = 2*np.pi - w_true
+
+            # True anomaly
+            nu = np.arccos(np.dot(e_vec, r_vec)/(e*r))
+            if np.dot(r_vec, v_vec) < 0:
+                nu = 2*np.pi - nu
+    else:
+        #non-Equatorial orbit
+
+        # Right-ascension of ascending node
+        raan = np.arctan2(h_vec[0], -h_vec[1])
+
+        # Argument of Latitude (w + nu)
+        u = np.arccos(np.dot(n_vec, r_vec)/(n*r))
+        if r_vec[2] < 0 : #u > 180 deg
+            u = 2*np.pi - u
+
+        if e < ECCENTRICITY_THRES:
+            #Non-equatorial circular orbit: periapsis not defined
+            #not defined:
+            w_true = 0  # True Argument of Periapsis
+            w = 0       # Argument of Periapsis
+            nu = 0      # True Anomaly
+            ret = 1
+        else:
+            #Non-equatorial non-circular orbit
+
+            # Argument of Periapsis
+            w = np.arccos(np.dot(n_vec, e_vec)/(n*e))
+            if e_vec[2] < 0:
+                w = 2*np.pi - w
+
+            # True Argument of Periapsis
+            w_true = np.arccos(np.dot(x_vec, e_vec)/e)
+            if e_vec[1] < 0:
+                w_true = 2*np.pi - w_true
+
+            # True Anomaly
+            nu = np.arccos(np.dot(e_vec, self._r_vec)/(e*r))
+            if np.dot(self._r_vec, self._v_vec) < 0:
+                nu = 2*np.pi - nu
+    #-----------------------
+
+    self._orbitalElements = orbitalElements.getOrbitalElementsObj(a, e, i, raan, w, nu, lambd, w_true, u)
+
+    return ret

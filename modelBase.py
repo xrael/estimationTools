@@ -274,7 +274,6 @@ class dynamicModelBase(modelBase):
     def getNmbrOutputs(self):
         return self.getNmbrOfStates() # it's the same for a dynamical model!
 
-
 ######################################################
 # orbitalDynamicModelBase
 #

@@ -23,6 +23,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import dynamicSimulator as dynSim
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 class sequentialFilterProc :
     """
@@ -40,7 +41,7 @@ class sequentialFilterProc :
     _Xhat_0 = None
     _P_0 = None
 
-    _t_i_1 = 0         #
+    _t_i_1 = 0
     _Xhat_i_1 = None   # Non-linear estimate at t_(i-1)
     _P_i_1 = None      # Covariance estimate at t_(i-1)
 
@@ -151,7 +152,7 @@ class sequentialFilterProc :
         self._prefit_res_vec = np.zeros((nmbrObs, nmbrObsAtEpoch))
         self._postfit_res_vec = np.zeros((nmbrObs, nmbrObsAtEpoch))
 
-        self.setMoreVectors(nmbrObs, nmbrStates, nmbrObsAtEpoch)
+        self.setMoreVectors(nmbrObs, nmbrStates, nmbrObsAtEpoch) # Define more vectors to hold data here
 
         (R_o,Q_o) = self.processCovariances(R, Q) # Change the covariance format if necessary
 
@@ -173,11 +174,37 @@ class sequentialFilterProc :
                 self._P_vec[i, :, :] = self.getCovarianceMatrix()
                 self._prefit_res_vec[i,:] = self.getPreFitResidual()
                 self._postfit_res_vec[i,:] = self.getPostFitResidual()
-                self.assignMoreVectors(i)
+                self.assignMoreVectors(i) # Save other data here
             # End observation processing
         # End of iterations
 
         return
+
+    def integrateAllBatch(self, X_0, time_vec, rel_tol, abs_tol, params):
+        """
+        This is useful for filters which do not modify the reference trajectory.
+        It's useful when using with processAllObservations() to integrate the whole batch of observations.
+        Override the integrate() method if the integration of all the batch is to be performed.
+        :param X_0: [1-dimension numpy array] Initial state at t_0.
+        :param time_vec: [1-dimensional numpy array] Time vector.
+        :param rel_tol: relative tolerance of the integrator.
+        :param abs_tol: absolute tolerance of the integrator.
+        :param params: [tuple] model parameters. Usually not used.
+        :return: The trajectory data in a tuple (reference + STMs)
+        """
+        time0added = False
+        if self._t_i_1 < time_vec[0]: # Add the initial time if it's not part of the time vector
+            t_vec = np.concatenate((np.array([self._t_i_1]), time_vec))
+            time0added = True
+        else:
+            t_vec = np.copy(time_vec)
+        refTraj = self.integrate(X_0, t_vec, rel_tol, abs_tol, params)
+        if time0added == True:
+            # The initial time is not part of the observation vector and it was added only to integrate
+            # It must be removed.
+            for i in range(0, len(refTraj)):
+                refTraj[i] = refTraj[i][1:]
+        return refTraj
 
     #-----------------------------Getter Methods-----------------------------#
     #### The following getters should be used after calling computeNextEstimate()
@@ -233,32 +260,31 @@ class sequentialFilterProc :
     def computeNextEstimate(self, i, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, refTrajectory = None, Q_i_1 = None): pass
 
 
+    def integrate(self, X_0, t_vec, rel_tol, abs_tol, params):
+        """
+        :param X_0:
+        :param t_vec:
+        :param rel_tol:
+        :param abs_tol:
+        :param params:
+        :return:
+        """
+        return None
+
+    """
+    This method uses the last estimate and propagates forward only using the dynamic model without observations.
+    :return:
+    """
+    @abstractmethod
+    def propagateForward(self, tf, dt, rel_tol, abs_tol, params): pass
+
+
     """
     This method defines the way the filter is going to be iterated.
     :return:
     """
     @abstractmethod
     def iterate(self) : pass
-
-    def integrateAllBatch(self, X_0, time_vec, rel_tol, abs_tol, params):
-        """
-        This is useful for filters which do not modify the reference trajectory.
-        It's useful when using with processAllObservations() to integrate the whole batch of observations.
-        Override if the integration of all the batch is to be performed.
-        This is only valid
-        :param X_0: [1-dimension numpy array] Initial state at t_0.
-        :param time_vec: [1-dimensional numpy array] Time vector.
-        :param rel_tol: relative tolerance of the integrator.
-        :param abs_tol: absolute tolerance of the integrator.
-        :param params: [tuple] model parameters. Usually not used.
-        :return: The trajectory data in a tuple (reference + STMs)
-        """
-        # Copy these lines
-        if self._t_i_1 < time_vec[0]: # Add the initial time if it's not part of the time vector
-            t_vec = np.concatenate((np.array([self._t_i_1]), time_vec))
-        else:
-            t_vec = time_vec
-        return None
 
     def processCovariances(self, R, Q):
         """
@@ -360,4 +386,69 @@ class sequentialFilterProc :
         plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
 
+        return
+
+    def plotCovarianceEnvelope(self, labels, filename_pos, filename_vel, filename_rest):
+        obs_time_vec = self._obs_time_vec
+        P = self._P_vec
+
+        nmbrStates = self._dynModel.getNmbrOfStates()
+
+        plt.figure()
+        for i in range(0, 3): # Position
+            subp = int(str(3) + '1' + str(i + 1))
+
+            plt.subplot(subp)
+            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.xlim([0, obs_time_vec[-1]/3600])
+            plt.ylabel(labels[i])
+            plt.legend(prop={'size':8})
+        plt.xlabel('Observation Time $[h]$')
+        plt.savefig(filename_pos, bbox_inches='tight', dpi=300)
+        plt.close()
+
+        plt.figure()
+        for i in range(3, 6): # Velocity
+            subp = int(str(3) + '1' + str(i-3 + 1))
+
+            plt.subplot(subp)
+            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.xlim([0, obs_time_vec[-1]/3600])
+            plt.ylabel(labels[i])
+            plt.legend(prop={'size':8})
+        plt.xlabel('Observation Time $[h]$')
+        plt.savefig(filename_vel, bbox_inches='tight', dpi=300)
+        plt.close()
+
+        if nmbrStates > 6: # Rest
+            plt.figure()
+            for i in range(6, nmbrStates):
+                subp = int(str(nmbrStates-6) + '1' + str(i-6 + 1))
+
+                plt.subplot(subp)
+                plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
+                plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+                plt.xlim([0, obs_time_vec[-1]/3600])
+                plt.ylabel(labels[i])
+                plt.legend(prop={'size':8})
+            plt.xlabel('Observation Time $[h]$')
+            plt.savefig(filename_rest, bbox_inches='tight', dpi=300)
+            plt.close()
+
+        return
+
+    def plotTrajectory(self,labels, filename):
+
+        fig = plt.figure()
+        #ax = fig.gca(projection='3d')
+        ax = Axes3D(fig)
+        ax.plot(self._Xhat_vec[:,0], self._Xhat_vec[:,1], self._Xhat_vec[:,2], label='Estimated Trajectory')
+        ax.legend(prop={'size':8})
+        ax.set_xlabel(labels[0])
+        ax.set_ylabel(labels[1])
+        ax.set_zlabel(labels[2])
+        plt.savefig(filename, bbox_inches='tight', dpi=300)
+        plt.close()
         return

@@ -275,8 +275,8 @@ class rangeRangeRateObsModel(observerModelBase):
         self._modelSymb = [range, range_rate]
         self._modelLambda = [g1, g2]
 
-        print "Range: ", range
-        print "Range rate, ", range_rate
+        # print "Range: ", range
+        # print "Range rate, ", range_rate
 
         return self._modelSymb
 
@@ -316,7 +316,7 @@ class rangeRangeRateObsModel(observerModelBase):
         for i in range(0, nmbrOfOutputs) :
             for j in range(0, nmbrOfStates) :
                 dG[i][j] = sp.diff(G[i], self._stateSymb[j])
-                print "Jacobian[",i,",",j,"]: ", dG[i][j]
+                #print "Jacobian[",i,",",j,"]: ", dG[i][j]
                 Htilde_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, x_gs, y_gs, z_gs, theta, theta_dot), dG[i][j], "numpy")
 
         self._jacobianSymb_posVel = dG

@@ -1176,9 +1176,6 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
         :param params: parameters used by the model
         :return:
         """
-
-        print "time ", t
-
         x = X[0]
         y = X[1]
         z = X[2]
@@ -1461,8 +1458,8 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         # print two_body
         # print third_body
         # print srp
-        # nmbrOfStates = self.getNmbrOfStates()
-        # F = np.zeros(nmbrOfStates)
+        nmbrOfStates = self.getNmbrOfStates()
+        F = np.zeros(nmbrOfStates)
 
         if self._usingDMC:
             w_x = X[states]
@@ -1475,7 +1472,6 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
             for i in range(0, nmbrOfStates):
                 F[i] = self._modelLambda[i](x, y, z, x_dot, y_dot, z_dot, x_sun_ref, y_sun_ref, z_sun_ref, x_third_ref, y_third_ref, z_third_ref, mu, R_E, [J], mu_third, C_R, A_m, R_1AU, srp_flux, c)
 
-        print F
         return F
 
     def computeJacobian(self, X, t, params):
@@ -1659,7 +1655,7 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
             for i in range(6, nmbrOfStates): # for every other state
                 self._modelSymb.append(0)
             for i in range(0, nmbrOfStates):
-                print "Model component ", i, " : ", self._modelSymb[i]
+                #print "Model component ", i, " : ", self._modelSymb[i]
                 self._modelLambda[i] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, x_sun_ref, y_sun_ref, z_sun_ref, x_third_ref, y_third_ref, z_third_ref, mu, R_E, [J], mu_third, C_R, A_m, R_1AU, srp_flux, c), self._modelSymb[i], "numpy")
 
         return self._modelSymb
@@ -1720,7 +1716,7 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
                 F[i] = self._modelSymb[i]
                 for j in range(0, nmbrOfStates) :
                     dF[i][j] = sp.diff(F[i], self._stateSymb[j])
-                    print "Model Partial [", i, ",", j, "]: ", dF[i][j]
+                    #print "Model Partial [", i, ",", j, "]: ", dF[i][j]
                     A_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, x_sun_ref, y_sun_ref, z_sun_ref, x_third_ref, y_third_ref, z_third_ref, mu, R_E, [J], mu_third, C_R, A_m, R_1AU, srp_flux, c), dF[i][j], "numpy")
 
         self._jacobianSymb = dF
