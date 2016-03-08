@@ -55,6 +55,10 @@ class sequentialFilterProc :
     _postfit_res_vec = None
     _obs_vec = None
     _obs_time_vec = None
+
+    # Iteration counters
+    _iteration = 0
+    _nmbrIterations = 0
     ##------------------------------------------
 
     ##---------------Constructor----------------
@@ -76,6 +80,9 @@ class sequentialFilterProc :
         self._postfit_res_vec = None
         self._obs_vec = None
         self._obs_time_vec = None
+
+        self._iteration = 0
+        self._nmbrIterations = 0
 
         return
 
@@ -125,6 +132,10 @@ class sequentialFilterProc :
         self._obs_vec = None
         self._obs_time_vec = None
 
+        # Default iterations
+        self._iteration = 0
+        self._nmbrIterations = 1
+
         return
 
     def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q = None):
@@ -157,6 +168,7 @@ class sequentialFilterProc :
         (R_o,Q_o) = self.processCovariances(R, Q) # Change the covariance format if necessary
 
         while self.iterate():
+            print "Iteration number", self._iteration
             # Integrate the whole batch, if possible
             refTraj = self.integrateAllBatch(self._Xhat_i_1, obs_time_vector, rel_tol, abs_tol, ())
 
@@ -403,7 +415,7 @@ class sequentialFilterProc :
             plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
             plt.xlim([0, obs_time_vec[-1]/3600])
             plt.ylabel(labels[i])
-            plt.legend(prop={'size':8})
+            #plt.legend(prop={'size':8})
         plt.xlabel('Observation Time $[h]$')
         plt.savefig(filename_pos, bbox_inches='tight', dpi=300)
         plt.close()

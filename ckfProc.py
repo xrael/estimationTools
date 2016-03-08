@@ -45,8 +45,8 @@ class ckfProc(sequentialFilterProc) :
         self._Xref_vec = None
         self._xhat_vec = None
 
-        self._iteration = 0
-        self._nmbrIterations = 0
+        # self._iteration = 0
+        # self._nmbrIterations = 0
 
         self._josephFormFlag = 0
 
@@ -77,9 +77,9 @@ class ckfProc(sequentialFilterProc) :
 
         self._I = np.eye(self._dynModel.getNmbrOfStates())
 
-        # Default iterations
-        self._iteration = 0
-        self._nmbrIterations = 1
+        # # Default iterations
+        # self._iteration = 0
+        # self._nmbrIterations = 1
 
         return
 
