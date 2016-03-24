@@ -64,7 +64,7 @@ def forwardSubstitution(L, b):
     """
     n = b.size
     z = np.zeros(b)
-    for i in range(0, b):
+    for i in range(0, n):
         aux = 0
         for j in range(0, i):
             aux += L[i,j] * z[j]
@@ -87,7 +87,7 @@ def forwardSubstitutionInversion(U):
     """
     For an upper triangular matrix L,
     this function computes the inverse S using forward substitution
-    by analizyng the product S*U=I
+    by analyzing the product S*U=I
     :param L: [2-dimensional numpy array] Upper triangular matrix.
     :return: [2-dimensional numpy array] Inverse (also upper triangular).
     """

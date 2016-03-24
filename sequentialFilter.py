@@ -274,6 +274,8 @@ class sequentialFilterProc :
 
     def integrate(self, X_0, t_vec, rel_tol, abs_tol, params):
         """
+        Integrate a trajectory using X_0 as initial condition and obtaining values at the time steps specified in the vector t_vec.
+        OVERRIDE THIS METHOD IF THE INTEGRATION OF A WHOLE BATCH FEATURE IS TO BE USED.
         :param X_0:
         :param t_vec:
         :param rel_tol:
@@ -400,7 +402,7 @@ class sequentialFilterProc :
 
         return
 
-    def plotCovarianceEnvelope(self, labels, filename_pos, filename_vel, filename_rest):
+    def plotCovarianceEnvelope(self, labels, filename_pos, filename_vel, filename_rest, dividing_factor = 1):
         obs_time_vec = self._obs_time_vec
         P = self._P_vec
 
@@ -411,8 +413,8 @@ class sequentialFilterProc :
             subp = int(str(3) + '1' + str(i + 1))
 
             plt.subplot(subp)
-            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
-            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
             plt.xlim([0, obs_time_vec[-1]/3600])
             plt.ylabel(labels[i])
             #plt.legend(prop={'size':8})
@@ -425,8 +427,8 @@ class sequentialFilterProc :
             subp = int(str(3) + '1' + str(i-3 + 1))
 
             plt.subplot(subp)
-            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
-            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
             plt.xlim([0, obs_time_vec[-1]/3600])
             plt.ylabel(labels[i])
             plt.legend(prop={'size':8})
@@ -451,12 +453,12 @@ class sequentialFilterProc :
 
         return
 
-    def plotTrajectory(self,labels, filename):
+    def plotTrajectory(self,labels, filename, dividing_factor = 1):
 
         fig = plt.figure()
         #ax = fig.gca(projection='3d')
         ax = Axes3D(fig)
-        ax.plot(self._Xhat_vec[:,0], self._Xhat_vec[:,1], self._Xhat_vec[:,2], label='Estimated Trajectory')
+        ax.plot(self._Xhat_vec[:,0]/dividing_factor, self._Xhat_vec[:,1]/dividing_factor, self._Xhat_vec[:,2]/dividing_factor, label='Estimated Trajectory')
         ax.legend(prop={'size':8})
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])

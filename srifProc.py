@@ -106,7 +106,8 @@ class srifProc(sequentialFilterProc) :
 
         if t_i == self._t_i_1:
             Xref_i = self._Xref_i_1
-            Rbar_i = self._R_i_1
+            Rbar_i = np.copy(self._R_i_1)
+            #Rbar_i = orTrans.householderTransformation(Rbar_i)
             bbar_i = self._b_i_1
             stm_ti_t0 = self._stm_i_1
         else:
@@ -124,6 +125,7 @@ class srifProc(sequentialFilterProc) :
             bbar_i = self._b_i_1
             Rbar_i = self._R_i_1.dot(np.linalg.inv(stm_i))
             #Rbar_i = orTrans.householderTransformation(Rbar_i)
+
 
             #Pbar_i = stm_i.dot(self._P_i_1).dot(stm_i.T)
             # if self._dynModel.usingSNC() and Q_i_1 is not None:

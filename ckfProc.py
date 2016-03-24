@@ -40,10 +40,12 @@ class ckfProc(sequentialFilterProc) :
 
         self._I = None
 
-        self._stm_i_1 = None
+        self._stm_i_1_0 = None  # From t0 to t_i
+        self._stm_i_1 = None    # From t_i_i to t_i
 
         self._Xref_vec = None
         self._xhat_vec = None
+        self._Pbar_vec = None
 
         # self._iteration = 0
         # self._nmbrIterations = 0
@@ -71,11 +73,10 @@ class ckfProc(sequentialFilterProc) :
         self._Xref_i_1 = np.copy(Xbar_0)
 
         self._I = np.eye(self._dynModel.getNmbrOfStates())
+        self._stm_i_1_0 = np.copy(self._I)
         self._stm_i_1 = np.copy(self._I)
 
         self._Pbar_i_1 = np.copy(Pbar_0)
-
-        self._I = np.eye(self._dynModel.getNmbrOfStates())
 
         # # Default iterations
         # self._iteration = 0
@@ -105,12 +106,13 @@ class ckfProc(sequentialFilterProc) :
             Xref_i = self._Xref_i_1
             xbar_i = self._xhat_i_1
             Pbar_i = self._P_i_1
-            stm_ti_t0 = self._stm_i_1
+            stm_ti_t0 = self._stm_i_1_0
+            stm_i = self._stm_i_1
         else:
             if refTrajectory is None: # Integrate
                 (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
                                                                                  self._t_i_1, dt, t_i, rel_tol, abs_tol)
-                stm_ti_t0 = stm_i.dot(self._stm_i_1) # STM from t_0 to t_i
+                stm_ti_t0 = stm_i.dot(self._stm_i_1_0) # STM from t_0 to t_i
             else: # The whole batch has been processed and the reference trajectory is already available
                 Xref_i = refTrajectory[0][i]
                 stm_ti_t0 = refTrajectory[1][i]
@@ -149,11 +151,12 @@ class ckfProc(sequentialFilterProc) :
         self._prefit_residual = y_i
         self._postfit_residual = y_i - Htilde_i.dot(xhat_i)
 
-        self._stm_i_1 = stm_ti_t0 # STM from t_(i-1) to t_0
+        self._stm_i_1_0 = stm_ti_t0 # STM from t_(i-1) to t_0
+        self._stm_i_1 = stm_i
 
         return
 
-    def integrateAllBatch(self, X_0, time_vec, rel_tol, abs_tol, params):
+    def integrate(self, X_0, time_vec, rel_tol, abs_tol, params):
         """
         Integrate th whole batch. Possible for the SRIF since the reference trajectory does not change.
         :param X_0: [1-dimension numpy array] Initial state at t_0.
@@ -165,6 +168,50 @@ class ckfProc(sequentialFilterProc) :
         """
         (states, stms, time, Xref_f, stm_f) = self._dynSim.propagateWithSTMtimeVec(X_0, self._I, params, time_vec, rel_tol, abs_tol)
         return (states, stms, time)
+
+    def propagateForward(self, dtf, dt, rel_tol, abs_tol, params):
+        """
+        Propagates the filter forward without observations, only using teh model
+        :param dtf: [double] interval of time to propagate forward (The estimation will be advanced from the last observation time in dtf).
+        :param dt: [double] Time step. Should be smaller than dtf.
+        :param rel_tol: relative tolerance of the integrator.
+        :param abs_tol: absolute tolerance of the integrator.
+        :param params: [tuple] model parameters. Usually not used.
+        :return:
+        """
+        #tf = self._t_i_1 + dtf
+        #num = int((tf - self._t_i_1)/dt) + 1
+        num = int(dtf/dt) + 1
+        print "num: ", num
+        tf = (num - 1) * dt + self._t_i_1 # includes the last value
+        print "t_i: ", self._t_i_1
+        print "t_f: ", tf
+        time_vec = np.linspace(self._t_i_1, tf, num)
+        print "time_vec: ", time_vec
+        (states, stms, time, Xref_f, stm_f) = self._dynSim.propagateWithSTMtimeVec(self._Xref_i_1, self._I, params, time_vec, rel_tol, abs_tol)
+
+        nmbrStates = self._dynModel.getNmbrOfStates()
+
+        Xhat_vec_prop = np.zeros((num, nmbrStates))
+        xhat_vec_prop = np.zeros((num, nmbrStates))
+        P_vec_prop = np.zeros((num, nmbrStates, nmbrStates))
+        for i in range(0, num):
+            stm_ti_tobs = stms[i] # STM from the propagation initial time to ti
+            #stm_ti_tobs = stms[i].dot(np.linalg.inv(self._stm_i_1)) # STM from the propagation initial time to ti
+            xhat_vec_prop[i,:] = stm_ti_tobs.dot(self._xhat_i_1)
+            Xhat_vec_prop[i,:] = states[i] + xhat_vec_prop[i]
+            P_vec_prop[i,:,:] = stm_ti_tobs.dot(self._P_i_1.dot(stm_ti_tobs.T))
+
+        self._Xref_i_1 = Xref_f
+        #stm_tf_ti = stm_f.dot(np.linalg.inv(self._stm_i_1)) # STM from the propagation initial time to tf
+        stm_tf_ti = stm_f
+        self._stm_i_1_0 = stm_f.dot(self._stm_i_1_0)
+        self._stm_i_1 = stm_f
+        self._xhat_i_1 = stm_tf_ti.dot(self._xhat_i_1)
+        self._Xhat_i_1 = self._Xref_i_1 + self._xhat_i_1
+        self._P_i_1 = stm_tf_ti.dot(self._P_i_1.dot(stm_tf_ti.T))
+        self._t_i_1 = tf
+        return (Xhat_vec_prop, xhat_vec_prop, P_vec_prop, time_vec)
 
     def setNumberIterations(self, it):
         """
@@ -183,7 +230,7 @@ class ckfProc(sequentialFilterProc) :
         """
         if self._iteration < self._nmbrIterations:
             self._iteration = self._iteration + 1
-            xhat_0 = np.linalg.inv(self._stm_i_1).dot(self._xhat_i_1)
+            xhat_0 = np.linalg.inv(self._stm_i_1_0).dot(self._xhat_i_1)
             Xbar_0 = self._Xhat_0 + xhat_0
 
             self._xbar_0 = self._xbar_0 - xhat_0
@@ -195,6 +242,7 @@ class ckfProc(sequentialFilterProc) :
 
             self._xhat_i_1 = np.copy(self._xbar_0)
             self._Xref_i_1 = np.copy(Xbar_0)
+            self._stm_i_1_0 = np.copy(self._I)
             self._stm_i_1 = np.copy(self._I)
 
             return True
@@ -212,6 +260,8 @@ class ckfProc(sequentialFilterProc) :
         """
         self._Xref_vec = np.zeros((nmbrObs, nmbrStates))
         self._xhat_vec = np.zeros((nmbrObs, nmbrStates))
+        self._Pbar_vec = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+        self._stm_vec = np.zeros((nmbrObs, nmbrStates, nmbrStates))
         return
 
     def assignMoreVectors(self, i):
@@ -224,66 +274,67 @@ class ckfProc(sequentialFilterProc) :
         """
         self._Xref_vec[i, :] = self.getReferenceState()
         self._xhat_vec[i, :] = self.getDeviationEstimate()
+        self._Pbar_vec[i,:,:] = self.getAPrioriCovarianceMatrix()
+        self._stm_vec[i,:,:] = self.getSTMfromLastState()
         return
 
-    # def iterateSmoothedCKF(self, Xref_0, xbar_0, Pbar_0, t_0, joseph_flag, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, iterations, Q = None):
-    #
-    #     for i in range(0, iterations):
-    #         self.configureFilter(Xref_0, xbar_0, Pbar_0, t_0, joseph_flag)
-    #
-    #         self.processAllObservations(obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q)
-    #
-    #         (Xhat_ckf,
-    #          xhat_ckf,
-    #          Xref_ckf,
-    #          P_ckf,
-    #          prefit_ckf,
-    #          postfit_ckf,
-    #          Pbar_ckf,
-    #          stm_ckf) = self.processAllObservations(obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q)
-    #
-    #         (Xhat_smoothed, xhat_ckf_smoothed, P_ckf_smoothed) = self.getSmoothedSolution(Xref_ckf, xhat_ckf, P_ckf, Pbar_ckf, stm_ckf)
-    #
-    #         Xref_0 = Xref_0 + xhat_ckf_smoothed[0] # Updating initial guess
-    #
-    #         xbar_0 = xbar_0 - xhat_ckf_smoothed[0]
-    #
-    #     return
-    #
-    # def getSmoothedSolution(self, Xref, xhat, P, Pbar, stm):
-    #     """
-    #     Smoother. Returns the smoothed solution using all the observations.
-    #     It's not suited for real time processing. It should use all the observations.
-    #     Use it after calling processAllObservations()
-    #     :param xhat:
-    #     :param P:
-    #     :param Pbar:
-    #     :param stm:
-    #     :return:
-    #     """
-    #     xhat_shape = np.shape(xhat)
-    #     obs_length = xhat_shape[0]
-    #     state_length = xhat_shape[1]
-    #
-    #     # Smoothing
-    #     l = obs_length - 1 # Smoothing using observations from 0 to l (the last one)
-    #     S = np.zeros((l, state_length, state_length))
-    #     xhat_smoothed = np.zeros((obs_length, state_length))
-    #     P_smoothed = np.zeros((obs_length,state_length, state_length))
-    #     Xhat_smoothed = np.zeros((obs_length, state_length))
-    #     xhat_smoothed[l,:] = xhat[l]
-    #     Xhat_smoothed[l,:] = Xref[l] + xhat[l]
-    #     P_smoothed[l,:,:] = P[l]
-    #     for k in range(l-1, -1, -1):
-    #         phi = stm[k+1]
-    #         S[k,:,:] = P[k].dot(phi.T).dot(np.linalg.inv(Pbar[k+1]))
-    #         xhat_smoothed[k,:] = xhat[k] + S[k].dot(xhat_smoothed[k+1] - phi.dot(xhat[k]))
-    #         P_smoothed[k,:,:] = P[k] + S[k].dot(P_smoothed[k+1] - Pbar[k+1]).dot(S[k].T)
-    #
-    #         Xhat_smoothed[k,:] = Xref[k] + xhat_smoothed[k]
-    #     # end for
-    #
-    #     return (Xhat_smoothed, xhat_smoothed, P_smoothed)
+    def iterateSmoothedCKF(self, Xbar_0, Pbar_0, t_0, joseph_flag, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, iterations, Q = None):
+        Xref_0 = Xbar_0
+        xbar_0 = np.zeros(Xref_0.size)
+        for i in range(0, iterations):
+            self.configureFilter(Xbar_0, Pbar_0, t_0)
+            self.josephFormulation(joseph_flag)
+
+            self.processAllObservations(obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q)
+
+            Xref_ckf = self.getReferenceStateVector()
+            xhat_ckf = self.getDeviationEstimateVector()
+            P_ckf = self.getCovarianceMatrixVector()
+            Pbar_ckf = self.getAprioriCovarianceMatrixVector()
+            stm_ckf = self.getSTMMatrixFromLastStateVector()
+
+            (Xhat_smoothed, xhat_ckf_smoothed, P_ckf_smoothed) = self.getSmoothedSolution(Xref_ckf, xhat_ckf, P_ckf, Pbar_ckf, stm_ckf)
+
+            Xref_0 = Xref_0 + xhat_ckf_smoothed[0] # Updating initial guess
+
+            xbar_0 = xbar_0 - xhat_ckf_smoothed[0]
+
+        return
+
+    def getSmoothedSolution(self, Xref, xhat, P, Pbar, stm):
+        """
+        Smoother. Returns the smoothed solution using all the observations.
+        It's not suited for real time processing. It should use all the observations.
+        Use it after calling processAllObservations()
+        :param xhat:
+        :param P:
+        :param Pbar:
+        :param stm:
+        :return:
+        """
+        xhat_shape = np.shape(xhat)
+        obs_length = xhat_shape[0]
+        state_length = xhat_shape[1]
+
+        # Smoothing
+        l = obs_length - 1 # Smoothing using observations from 0 to l (the last one)
+        S = np.zeros((l, state_length, state_length))
+        xhat_smoothed = np.zeros((obs_length, state_length))
+        P_smoothed = np.zeros((obs_length,state_length, state_length))
+        Xhat_smoothed = np.zeros((obs_length, state_length))
+        xhat_smoothed[l,:] = xhat[l]
+        Xhat_smoothed[l,:] = Xref[l] + xhat[l]
+        P_smoothed[l,:,:] = P[l]
+        for k in range(l-1, -1, -1):
+            phi = stm[k+1]
+            S[k,:,:] = P[k].dot(phi.T).dot(np.linalg.inv(Pbar[k+1]))
+            xhat_smoothed[k,:] = xhat[k] + S[k].dot(xhat_smoothed[k+1] - phi.dot(xhat[k]))
+            P_smoothed[k,:,:] = P[k] + S[k].dot(P_smoothed[k+1] - Pbar[k+1]).dot(S[k].T)
+
+            Xhat_smoothed[k,:] = Xref[k] + xhat_smoothed[k]
+        # end for
+
+        return (Xhat_smoothed, xhat_smoothed, P_smoothed)
 
     # The following getters should be used after calling computeNextEstimate()
 
@@ -299,7 +350,10 @@ class ckfProc(sequentialFilterProc) :
         return self._Pbar_i_1
 
     # STM from t_0 to current time
-    def getSTM(self):
+    def getSTMfromt0(self):
+        return self._stm_i_1_0
+
+    def getSTMfromLastState(self):
         return self._stm_i_1
 
     #### The following getters should be used after calling processAllObservations()
@@ -309,6 +363,12 @@ class ckfProc(sequentialFilterProc) :
 
     def getDeviationEstimateVector(self):
         return self._xhat_vec
+
+    def getAprioriCovarianceMatrixVector(self):
+        return self._Pbar_vec
+
+    def getSTMMatrixFromLastStateVector(self):
+        return self._stm_vec
 
     # Inversion method used
     def _invert(self, matrix):
