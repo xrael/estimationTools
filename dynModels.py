@@ -28,8 +28,8 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
     """
 
     ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(zonalHarmonicsModel, self).__init__("ZonalHarmonics", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(zonalHarmonicsModel, self).__init__("ZonalHarmonics", stateSymb, params, propagationFunction, inputSymb)
 
         return
 
@@ -49,7 +49,8 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
         """
         params = (mu, R_E, J, include_two_body_dynamics)
         symbState = zonalHarmonicsModel.buildSymbolicState()
-        zoneHarmModel = zonalHarmonicsModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        zoneHarmModel = zonalHarmonicsModel(symbState, params, propagationFunction, inputSymb)
 
         return zoneHarmModel
 
@@ -66,13 +67,30 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
         X_symb = [x, y, z, x_dot, y_dot, z_dot]
         return X_symb
 
+    ## THIS IS THE METHOD TO OVERRIDE IF A CONSIDER PARAMETER ANALYSIS IS TO BE ACCOMPLISHED!!!
+    @classmethod
+    def buildSymbolicInput(cls):
+        """
+        Modify this method to build a new symbolic input vector (for control force or consider covariance analysis).
+        :return: A list with the symbolic symbols of the input.
+        """
+        # DEFAULT
+        J_3 = sp.symbols('J_3')
+        U_symb = [J_3]
+        return U_symb
+
+    def getInput(self, t):
+        J = self._params[2]
+        return J[3]
+
     ## -------------------------Public Interface--------------------------
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
-        :param X: State.
+        :param X: State vector.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
         x = X[0]
@@ -106,12 +124,13 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
 
     # Returns A matrix
     # This is application-specific. It depends on how state vector is defined.
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
         :param params: parameters used by the model
+        :param u: Input vector
         :return:
         """
         x = X[0]
@@ -145,8 +164,50 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
 
         return A
 
+    def computeInputJacobian(self, X, t, params, u):
+        """
+        Computes the Jacobian wrt the input of the dynamic function
+        :param X: State
+        :param t: time
+        :param params: parameters used by the model
+        :param u: Input vector
+        :return:
+        """
+        x = X[0]
+        y = X[1]
+        z = X[2]
+        x_dot = X[3]
+        y_dot = X[4]
+        z_dot = X[5]
+
+        # CHANGE THIS PART FOR ADDING MORE STATES!!!
+        mu = self._params[0]
+        R_E = self._params[1]
+        J = self._params[2]
+        #-------------------------------------------
+
+        nmbrOfStates = self.getNmbrOfStates()
+        nmbrOfInputs = self.getNmbrInputs()
+        B_input = np.zeros([nmbrOfStates,nmbrOfInputs])
+
+        if self._usingDMC:
+            w_x = X[-3] # DMC is at the end of the state
+            w_y = X[-2]
+            w_z = X[-1]
+            B = self._DMCbeta
+            for i in range(0,nmbrOfStates):
+                for j in range(0,nmbrOfInputs):
+                    B_input[i][j] = self._jacobianInputLambda[i][j](x, y, z, x_dot, y_dot, z_dot, w_x, w_y, w_z, mu, R_E, [J], [B])
+        else:
+            for i in range(0,nmbrOfStates):
+                for j in range(0,nmbrOfInputs):
+                    B_input[i][j] = self._jacobianInputLambda[i][j](x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J])
+
+        return B_input
+
+
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions in the attributes
         _potential, _acceleration, _potentialLambda, _accelerationLambda.
@@ -187,8 +248,8 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
                     P[l] = ((u*(2*l-1) * P[l-1] - (l-1)*P[l-2])/l)
                     P[l].simplify()
 
-                if J_params[l] != 0:
-                    U = U - mu/r * (R_E/r)**l * J[l] * P[l]
+                #if J_params[l] != 0:
+                U = U - mu/r * (R_E/r)**l * J[l] * P[l]
 
         dUx = sp.diff(U, x)
         dUy = sp.diff(U, y)
@@ -231,7 +292,7 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
         return self._modelSymb
 
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions in the attributes _jacobian, _jacobianLambda.
@@ -277,6 +338,55 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
         self._jacobianLambda = A_lambda
 
         return self._jacobianSymb
+
+    def computeSymbolicInputJacobian(self):
+        """
+        Symbollically computes the Jacobian matrix of the model with respect to position and velocity
+        and stores the models and lambda functions in the attributes _jacobian, _jacobianLambda.
+        :return:
+        """
+        degree = self._params[2].size - 1
+
+        x = self._stateSymb[0]
+        y = self._stateSymb[1]
+        z = self._stateSymb[2]
+        x_dot = self._stateSymb[3]
+        y_dot = self._stateSymb[4]
+        z_dot = self._stateSymb[5]
+
+        mu = sp.symbols('mu')
+        R_E = sp.symbols('R_E')
+        J = sp.symarray('J', degree + 1)
+
+        nmbrOfStates = self.getNmbrOfStates()
+        nmbrOfInputs = self.getNmbrInputs()
+
+        F = [0 for i in range(0, nmbrOfStates)]
+        dF = [[0 for i in range(0, nmbrOfInputs)] for i in range(0, nmbrOfStates)]
+        B_lambda = [[0 for i in range(0, nmbrOfInputs)] for i in range(0, nmbrOfStates)]
+
+        if self._usingDMC:
+            w_x = self._stateSymb[-3]
+            w_y = self._stateSymb[-2]
+            w_z = self._stateSymb[-1]
+            B = sp.symarray('B', 3)
+            for i in range(0, nmbrOfStates) :
+                F[i] = self._modelSymb[i]
+                for j in range(0, nmbrOfInputs) :
+                    dF[i][j] = sp.diff(F[i], self._inputSymb[j])
+                    B_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, w_x, w_y, w_z, mu, R_E, [J], [B]), dF[i][j], "numpy")
+        else:
+            for i in range(0, nmbrOfStates) :
+                F[i] = self._modelSymb[i]
+                for j in range(0, nmbrOfInputs) :
+                    dF[i][j] = sp.diff(F[i], self._inputSymb[j])
+                    B_lambda[i][j] = sp.lambdify((x, y, z, x_dot, y_dot, z_dot, mu, R_E, [J]), dF[i][j], "numpy")
+
+        self._jacobianInputSymb = dF
+        self._jacobianInputLambda = B_lambda
+
+        return self._jacobianInputSymb
+
 #######################################################################################################################
 
 #######################################################################################################################
@@ -289,8 +399,8 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
 class dragModel(orbitalDynamicModelBase):
 
     ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(dragModel, self).__init__("drag", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(dragModel, self).__init__("drag", stateSymb, params, propagationFunction, inputSymb)
 
         return
 
@@ -300,7 +410,8 @@ class dragModel(orbitalDynamicModelBase):
 
         params = (CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
         symbState = dragModel.buildSymbolicState()
-        drModel = dragModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        drModel = dragModel(symbState, params, propagationFunction, inputSymb)
 
         return drModel
 
@@ -318,12 +429,13 @@ class dragModel(orbitalDynamicModelBase):
         return X_symb
 
     ## -------------------------Public Interface--------------------------
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
         :param X: State.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
         x = X[0]
@@ -359,12 +471,13 @@ class dragModel(orbitalDynamicModelBase):
 
         return F
 
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
         :param params: parameters used by the model
+        :param u: Input vector.
         :return:
         """
         x = X[0]
@@ -403,7 +516,7 @@ class dragModel(orbitalDynamicModelBase):
         return A
 
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions.
         :return:
@@ -465,7 +578,7 @@ class dragModel(orbitalDynamicModelBase):
 
         return self._modelSymb
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
@@ -521,8 +634,8 @@ class dragModel(orbitalDynamicModelBase):
 class solarRadiationPressureModel(orbitalDynamicModelBase):
 
      ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(solarRadiationPressureModel, self).__init__("SRP", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(solarRadiationPressureModel, self).__init__("SRP", stateSymb, params, propagationFunction, inputSymb)
 
         return
 
@@ -546,7 +659,8 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
         """
         params = (C_R, A_m_ratio, R_1AU, srp_flux, speed_light, JD_0, a_meeus, inc_ecliptic, mu_sun)
         symbState = solarRadiationPressureModel.buildSymbolicState()
-        srpModel = solarRadiationPressureModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        srpModel = solarRadiationPressureModel(symbState, params, propagationFunction, inputSymb)
 
         return srpModel
 
@@ -564,12 +678,13 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
         return X_symb
 
     ## -------------------------Public Interface--------------------------
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
         :param X: State.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
 
@@ -608,12 +723,13 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
 
         return F
 
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
         :param params: parameters used by the model
+        :param u: Input vector.
         :return:
         """
         x = X[0]
@@ -682,7 +798,7 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
         return (x_sun_ref, y_sun_ref, z_sun_ref)
 
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions.
         :return:
@@ -750,7 +866,7 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
 
         return self._modelSymb
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
@@ -810,8 +926,8 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
 class thirdBodyGravityModel(orbitalDynamicModelBase):
 
     ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(thirdBodyGravityModel, self).__init__("third_body", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(thirdBodyGravityModel, self).__init__("third_body", stateSymb, params, propagationFunction, inputSymb)
 
         return
 
@@ -821,7 +937,8 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
 
         params = (mu_third, JD_0, a_meeus, inc_ecliptic)
         symbState = thirdBodyGravityModel.buildSymbolicState()
-        thirdGravModel = thirdBodyGravityModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        thirdGravModel = thirdBodyGravityModel(symbState, params, propagationFunction, inputSymb)
 
         return thirdGravModel
 
@@ -839,12 +956,13 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
         return X_symb
 
     ## -------------------------Public Interface--------------------------
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
         :param X: State.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
 
@@ -879,12 +997,13 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
 
         return F
 
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
-        :param params: parameters used by the model
+        :param params: parameters used by the model.
+        :param u: Input vector.
         :return:
         """
         x = X[0]
@@ -951,7 +1070,7 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
         return (x_sun_ref, y_sun_ref, z_sun_ref)
 
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions.
         :return:
@@ -1019,7 +1138,7 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
 
         return self._modelSymb
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
@@ -1078,8 +1197,8 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
 class dragZonalHarmonicModel(orbitalDynamicModelBase):
 
     ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(dragZonalHarmonicModel, self).__init__("ZonalHarmonicsPlusDrag", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(dragZonalHarmonicModel, self).__init__("ZonalHarmonicsPlusDrag", stateSymb, params, propagationFunction, inputSymb)
         return
 
      ## Factory method
@@ -1094,7 +1213,8 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
         """
         params = (mu, R_E, J, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot, include_two_body_dynamics)
         symbState = dragZonalHarmonicModel.buildSymbolicState()
-        zonHarmDragMod = dragZonalHarmonicModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        zonHarmDragMod = dragZonalHarmonicModel(symbState, params, propagationFunction, inputSymb)
 
         return zonHarmDragMod
 
@@ -1120,12 +1240,13 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
 
     ## -------------------------Public Interface--------------------------
 
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
         :param X: State.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
 
@@ -1168,12 +1289,13 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
 
         return F
 
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
-        :param params: parameters used by the model
+        :param params: parameters used by the model.
+        :param u: Input vector.
         :return:
         """
         x = X[0]
@@ -1221,7 +1343,7 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
         return A
 
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions.
         :return:
@@ -1297,7 +1419,7 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
         return self._modelSymb
 
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
@@ -1358,8 +1480,8 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
 class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
 
     ## Constructor: DO NOT USE IT!
-    def __init__(self, stateSymb, params, propagationFunction = 'F'):
-        super(zonalHarmonicThirdBodySRPModel, self).__init__("ZonalHarmonics_ThirdBody_SRP", stateSymb, params, propagationFunction)
+    def __init__(self, stateSymb, params, propagationFunction = 'F', inputSymb = None):
+        super(zonalHarmonicThirdBodySRPModel, self).__init__("ZonalHarmonics_ThirdBody_SRP", stateSymb, params, propagationFunction, inputSymb)
         return
 
      ## Factory method
@@ -1386,7 +1508,8 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         """
         params = (mu, R_E, J, mu_third, mu_sun, C_R, A_m_ratio, R_1AU, srp_flux, speed_light, JD_0, a_meeus, inc_ecliptic, include_two_body_dynamics)
         symbState = zonalHarmonicThirdBodySRPModel.buildSymbolicState()
-        zonHarmThirdSRPMod = zonalHarmonicThirdBodySRPModel(symbState, params, propagationFunction)
+        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        zonHarmThirdSRPMod = zonalHarmonicThirdBodySRPModel(symbState, params, propagationFunction, inputSymb)
 
         return zonHarmThirdSRPMod
 
@@ -1409,12 +1532,13 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
 
     ## -------------------------Public Interface--------------------------
 
-    def computeModel(self, X, t, params):
+    def computeModel(self, X, t, params, u = None):
         """
         Computes the dynamic function F(X,t)
         :param X: State.
         :param t: Time.
         :param params: parameters used by the function.
+        :param u: Input vector.
         :return: The result of the function in a vector with the same size than X.
         """
         x = X[0]
@@ -1474,12 +1598,13 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
 
         return F
 
-    def computeJacobian(self, X, t, params):
+    def computeJacobian(self, X, t, params, u = None):
         """
         Computes the Jacobian of the dynamic function
         :param X: State
         :param t: time
         :param params: parameters used by the model
+        :param u: Input vector.
         :return:
         """
         x = X[0]
@@ -1570,7 +1695,7 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         return (x_sun_ref, y_sun_ref, z_sun_ref, x_third_ref, y_third_ref, z_third_ref)
 
     ## -------------------------Private Methods--------------------------
-    def _computeSymbolicModel(self):
+    def computeSymbolicModel(self):
         """
         Symbollically computes F(X,t) and stores the models and lambda functions.
         :return:
@@ -1661,7 +1786,7 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         return self._modelSymb
 
 
-    def _computeSymbolicJacobian(self):
+    def computeSymbolicJacobian(self):
         """
         Symbollically computes the Jacobian matrix of the model with respect to position and velocity
         and stores the models and lambda functions.
