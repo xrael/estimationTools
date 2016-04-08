@@ -61,9 +61,10 @@ class dynamicSimulator:
 
     def propagate(self, initialState, params, t0, tf, dt, rtol, atol):
         """
-        Simulate the model X_dot = F(X, t)
+        Simulate the model X_dot = F(X, t).
+        Cannot be used to propagate X_dot = F(X, u, t) if u = u(t).
         :param initialState: Initial conditions.
-        :param params: Variable parameters for the dynamic model.
+        :param params: Variable parameters for the dynamic model. If u = const, params[0] = u.
         :param t0: Initial time.
         :param tf: Final time.
         :param dt: sample time.
@@ -84,7 +85,17 @@ class dynamicSimulator:
         return (self._timeVec, self._statesVec)
 
     def propagateManyStateVectors(self, initialState, params, t0, dt, tf, rtol, atol):
-
+        """
+        Propagates p state vectors in parallel.
+        :param initialState: [1-dimensional numpy array] Contains p initial state vectors in only 1 array.
+        :param params: Variable parameters for the dynamic model. If u = const, params[0] = u.
+        :param t0: Initial time.
+        :param tf: Final time.
+        :param dt: sample time.
+        :param rtol: Relative tolerance of the integrator.
+        :param atol: Absolute tolerance of the integrator.
+        :return:
+        """
         num = int((tf - t0)/dt) + 1
         tf = (num - 1) * dt + t0 # includes the last value
         time = np.linspace(t0, tf, num)
@@ -102,9 +113,12 @@ class dynamicSimulator:
     def propagateWithSTM(self, initial_state, initial_stm, params, t0, dt, tf, rtol, atol):
         """
         Simulate the model X_dot = F(X,t), propagating X(t) and the State Transition Matrix (STM).
+        It can also simulate the model X_dot = F(X,u,t), propagating X(t), the STM=dX(t)/dX(t_0) and STM_input=dX(t)/du(t_0).
         The STM equation is STM_dot = A(t)*STM, where A(t) is the Jacobian of F.
+        The STM input equation is STM_input_dot = A(t)*STM_input + B(t) where B(t)=dF/du.
         :param initialState: Initial state conditions.
-        :param initial_stm: Initial STM conditions.
+        :param initial_stm: Initial STM + STM_input conditions. STM is a nxn matrix while STM_input is nxq (n: Nmbr of states, q: Nmbr of inputs).
+        initial_stm is a nx(n+q) matrix.
         :param params: Variable parameters for the dynamic model.
         :param t0: Initial time.
         :param tf: Final time.
@@ -135,7 +149,13 @@ class dynamicSimulator:
         final_stm = Xf[state_length:total_length:1]
         final_stm = final_stm.reshape(stm_shape).T
 
-        stms = np.zeros([X.shape[0], state_length, state_length])
+        # stms = np.zeros([X.shape[0], state_length, state_length])
+        # for i in range(0, X.shape[0]) :
+        #     stms[i,:,:] = X[i,state_length:].reshape(stm_shape).T
+        #
+        # states = X[:,0:state_length]
+
+        stms = np.zeros([X.shape[0], stm_shape[0], stm_shape[1]])
         for i in range(0, X.shape[0]) :
             stms[i,:,:] = X[i,state_length:].reshape(stm_shape).T
 
@@ -175,9 +195,15 @@ class dynamicSimulator:
         final_stm = Xf[state_length:total_length:1]
         final_stm = final_stm.reshape(stm_shape).T
 
-        stms = np.zeros([X.shape[0], state_length, state_length])
+        # stms = np.zeros([X.shape[0], state_length, state_length])
+        # for i in range(0, X.shape[0]) :
+        #     stms[i,:,:] = X[i,state_length:].reshape(stm_shape).T
+
+        stms = np.zeros([X.shape[0], stm_shape[0], stm_shape[1]])
         for i in range(0, X.shape[0]) :
-            stms[i,:,:] = X[i,state_length:].reshape(stm_shape).T
+            aux_stm = X[i,state_length:]
+            aux = aux_stm.reshape((stm_shape[1], stm_shape[0])).T
+            stms[i,:,:] = aux
 
         states = X[:,0:state_length]
 

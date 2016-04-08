@@ -98,6 +98,7 @@ class sequentialFilterProc :
         proc = cls()
 
         obsModel.defineSymbolicState(dynModel.getSymbolicState()) # Redefines the state of the observer
+        obsModel.defineSymbolicInput(dynModel.getSymbolicInput())
 
         proc._dynModel = dynModel
         proc._obsModel = obsModel
