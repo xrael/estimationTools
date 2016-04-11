@@ -48,6 +48,7 @@ class srifProc(sequentialFilterProc) :
         self._Xref_i_1 = None
         self._xhat_i_1 = None
         self._stm_i_1 = None
+        self._stm_i_1_0 = None
         self._R_i_1 = None
         self._b_i_1 = None
         self._I = None
@@ -79,13 +80,18 @@ class srifProc(sequentialFilterProc) :
         self._R_i_1 = orTrans.backwardsSubstitutionInversion(L)
         self._b_i_1 = self._R_i_1.dot(self._xbar_0)
 
+        self._xhat_vec = None
+        self._stm_vec = None
+        self._stm_t0_vec = None
+        self._Xref_vec = None
+
         # # Default iterations
         # self._iteration = 0
         # self._nmbrIterations = 1
 
         return
 
-    def computeNextEstimate(self, i, t_i, Y_i, obs_params, R_sqrt_inv, dt, rel_tol, abs_tol, refTrajectory = None, Q_i_1 = None):
+    def computeNextEstimate(self, i, t_i, Y_i, obs_params, R_sqrt_inv, dt, rel_tol, abs_tol, refTrajectory = None, Q_sqrt_inv = None):
         """
         This method can be called in real time to get the next estimation deviation associated to the current observation.
         :param i: [int] Observation index.
@@ -97,7 +103,7 @@ class srifProc(sequentialFilterProc) :
         :param rel_tol: relative tolerance of the integrator.
         :param abs_tol: absolute tolerance of the integrator.
         :param refTrajectory: [tuple with numpy arrays] Reference trajectory and STMs. If None, the dynamic model should be integrated. It's used to avoid setting the integrator at every time step if all observation data is to be processed in batch.
-        :param Q_i_1: [2-dimensional numpy array] Process noise covariance.
+        :param Q_sqrt_inv: [2-dimensional numpy array] Process noise covariance inverse square root: Q = Q_sqrt_inv^-1 * Q_sqrt_inv^-T
         :return:
         """
         params = ()
@@ -110,6 +116,7 @@ class srifProc(sequentialFilterProc) :
             #Rbar_i = orTrans.householderTransformation(Rbar_i)
             bbar_i = self._b_i_1
             stm_ti_t0 = self._stm_i_1
+            stm_i = self._I
         else:
             if refTrajectory is None: # Integrate
                 (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
@@ -128,13 +135,20 @@ class srifProc(sequentialFilterProc) :
 
 
             #Pbar_i = stm_i.dot(self._P_i_1).dot(stm_i.T)
-            # if self._dynModel.usingSNC() and Q_i_1 is not None:
-            #     # Process Noise Transition Matrix with constant velocity approximation
-            #     Q = self._dynModel.getSncCovarianceMatrix(self._t_i_1, t_i, Xref_i + xbar_i, Q_i_1) # xbar_i should be 0 in the EKF
-            #     Pbar_i = Pbar_i + Q
-            # elif self._dynModel.usingDMC() and Q_i_1 is not None:
-            #     Q = self._dynModel.getSmcCovarianceMatrix(self._t_i_1, t_i, Q_i_1)
-            #     Pbar_i = Pbar_i + Q
+            if self._dynModel.usingSNC() and Q_sqrt_inv is not None:
+                q = Q_sqrt_inv.shape[1]
+                gamma_i = self._dynModel.getPNSTM(self._t_i_1, t_i)
+                A = np.zeros((n + q, q + n + 1))
+
+                A[:q,:q] = Q_sqrt_inv
+                A[q:,:q] = -Rbar_i.dot(gamma_i)
+                A[q:,q:(q+n)] = Rbar_i
+                A[q:,-1] = bbar_i
+
+                A = orTrans.householderTransformation(A)
+
+                Rbar_i = A[q:,q:(q+n)]
+                bbar_i = A[q:,-1]
 
         # Read Observation
         Htilde_i = self._obsModel.computeJacobian(Xref_i, t_i, obs_params)
@@ -163,14 +177,45 @@ class srifProc(sequentialFilterProc) :
 
         self._t_i_1 = t_i
         self._Xref_i_1 = Xref_i
-        self._stm_i_1 = stm_ti_t0 # STM from t_0 to t_i
+        self._stm_i_1_0 = stm_ti_t0 # STM from t_0 to t_i
+        self._stm_i_1 = stm_i
         self._prefit_residual = y_i
         self._postfit_residual = y_i - Htilde_i.dot(self._xhat_i_1)
 
         return
 
+    def setMoreVectors(self, nmbrObs, nmbrStates, nmbrObsAtEpoch):
+        """
+        OVERLOAD THIS METHOD if more vectors are to be used inside processAllObservations().
+        Example: deviations, STMs, a priori values, etc.
+        :param nmbrObs: [int] Total number of obserfvation vectors.
+        :param nmbrStates: [int] Number of states.
+        :param nmbrObsAtEpoch: [int] Number of observations at each epoch (in each observation vector).
+        :return: void
+        """
+        self._Xref_vec = np.zeros((nmbrObs, nmbrStates))
+        self._xhat_vec = np.zeros((nmbrObs, nmbrStates))
+        self._stm_vec = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+        self._stm_t0_vec = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+        return
+
+    def assignMoreVectors(self, i):
+        """
+        OVERLOAD THIS METHOD if more vectors are to be used inside processAllObservations().
+        Example: deviations, STMs, a priori values, etc.
+        Use this method to assign other vector created in setMoreVectors()
+        :param i: [int] Observation index.
+        :return: void
+        """
+        self._Xref_vec[i, :] = self.getReferenceState()
+        self._xhat_vec[i, :] = self.getStateDeviationEstimate()
+        self._stm_vec[i,:,:] = self.getSTMfromLastState()
+        self._stm_t0_vec[i,:,:] = self.getSTMfromt0()
+        return
+
+    # The following getters should be used after calling computeNextEstimate()
+
     def getStateDeviationEstimate(self):
-        self._xhat_i_1 = orTrans.backwardsSubstitution(self._R_i_1, self._b_i_1)
         return self._xhat_i_1
 
     # Covariance matrix at current time
@@ -179,16 +224,48 @@ class srifProc(sequentialFilterProc) :
         self._P_i_1 = Ri.dot(Ri.T)
         return self._P_i_1
 
+    def getReferenceState(self):
+        return self._Xref_i_1
+
+    # STM from t_0 to current time
+    def getSTMfromt0(self):
+        return self._stm_i_1_0
+
+    def getSTMfromLastState(self):
+        return self._stm_i_1
+
+     #### The following getters should be used after calling processAllObservations()
+
+     # Vector of all state estimates
+    def getReferenceStateVector(self):
+        return self._Xref_vec
+
+    def getDeviationEstimateVector(self):
+        return self._xhat_vec
+
+    def getSTMMatrixFromLastStateVector(self):
+        return self._stm_vec
+
+    def getSTMMatrixfrom0Vector(self):
+        return self._stm_t0_vec
+
     def processCovariances(self, R, Q):
         """
         Overriden method from sequentialFilterProc class.
         :param R: [2-dimensional numpy array] Observation covariance.
         :param Q: [2-dimensional numpy array] Noise covariance.
-        :return: The inverse of the square root of R. Q is not modified
+        :return: The inverse of the square root of R and Q.
         """
-        L = np.linalg.cholesky(R) # R = L*L^T
-        R_o = orTrans.backwardsSubstitutionInversion(L)
-        return (R_o, Q)
+        LR = np.linalg.cholesky(R) # R = LR*LR^T
+        R_o = orTrans.backwardsSubstitutionInversion(LR)
+
+        if Q != None:
+            LQ = np.linalg.cholesky(Q) # Q = LQ*LQ^T
+            Q_o = orTrans.backwardsSubstitutionInversion(LQ)
+        else:
+            Q_o = None
+
+        return (R_o, Q_o)
 
     def integrate(self, X_0, time_vec, rel_tol, abs_tol, params):
         """

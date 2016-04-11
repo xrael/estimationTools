@@ -20,9 +20,73 @@ class ekfProc(ckfProc) :
 
     def __init__(self):
         ckfProc.__init__(self)
+
+        self._ckf_counter = 0
+        self._start_using_EKF_at_obs = 0
+        self._lastObsTime = 0
         return
 
-    def computeNextEstimate(self, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, useEKF = True, Q_i_1 = None):
+    def configureFilter(self, Xbar_0, Pbar_0, t_0):
+        """
+        Before computing the kalman solution, call this method.
+        :param Xref_0: [1-dimensional numpy array] Initial guess of the state.
+        :param xbar_0: [1-dimensional numpy array] Deviation from the initial guess (usually 0).
+        :param Pbar_0: [2-dimensional numpy array] A-priori covariance.
+        :param t_0: [double] Initial time.
+        :param joseph_flag: [boolean] Set to true to propagate the covariance using Joseph Formulation.
+        :return:
+        """
+        ckfProc.configureFilter(self, Xbar_0, Pbar_0, t_0)
+
+        self._ckf_counter = 0
+        self._start_using_EKF_at_obs = 0
+        self._lastObsTime = t_0
+
+        return
+
+    def startEKFafter(self, n):
+        """
+        Usually, the CKF is used at the beginning, and thefilter switches to the EKF after n observations.
+        :param start_using_EKF_at_obs:
+        :return:
+        """
+        self._start_using_EKF_at_obs = n
+        return
+
+    def computeNextEstimate(self, i, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, refTrajectory = None, Q_i_1 = None):
+        """
+        This works as an interface between the computeNextEstimate() interface defined in the sequential filter interface
+        and the computeNextEstimateEKF().
+        :param i: [int] Number of observation.
+        :param t_i: [double] Next observation time.
+        :param Y_i: [1-dimension numpy array] Observations at time t_i.
+        :param obs_params: [tuple] Non-static observation parameters.
+        :param R_i: [2-dimensional numpy array] Observation covariance.
+        :param dt: [double] time step in advancing from t_i_1 to t_i.
+        :param rel_tol: relative tolerance of the integrator.
+        :param abs_tol: absolute tolerance of the integrator.
+        :param refTrajectory: NOT USED IN THE CKF.
+        :param Q_i_1: [2-dimensional numpy array] Process noise covariance.
+        :return:
+        """
+        if self._ckf_counter >= self._start_using_EKF_at_obs and i >= 1:
+            if t_i - self._lastObsTime <= 100:
+                useEKF = True  # Only use EKF after processing start_using_EKF_at_obs observations
+            else :  # CHECK THIS!!!!! The ckf should be used for an interval of time
+                self._ckf_counter = 0
+                useEKF = False
+        else:
+            self._ckf_counter = self._ckf_counter + 1
+            useEKF = False
+
+        self.computeNextEstimateEKF(t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, useEKF, Q_i_1)
+
+        self._lastObsTime = t_i
+
+        return
+
+
+    def computeNextEstimateEKF(self, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, useEKF = True, Q_i_1 = None):
         """
         This method can be called in real time to get the next estimation deviation associated to the current observation.
         :param t_i: [double] Next observation time.
@@ -39,10 +103,11 @@ class ekfProc(ckfProc) :
         params = ()
 
         if t_i == self._t_i_1:
-            stm_i = self._I
             Xref_i = self._Xref_i_1
             xbar_i = self._xhat_i_1
             Pbar_i = self._P_i_1
+            stm_ti_t0 = self._stm_i_1_0
+            stm_i = self._I
         else:
             (states, stms, time, Xref_i, stm_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, self._I, params,
                                                                                  self._t_i_1, dt, t_i, rel_tol, abs_tol)
@@ -89,12 +154,33 @@ class ekfProc(ckfProc) :
         self._Xref_i_1 = Xref_i
         self._xhat_i_1 = xhat_i  # The correction is stored even though it's zeroed after updating the reference
         self._P_i_1 = P_i
+        self._Pbar_i_1 = Pbar_i
         self._prefit_residual = y_i
         self._postfit_residual = post_fit_residuals
 
-        self._stm_i_1 = stm_i.dot(self._stm_i_1)
+        self._stm_i_1_0 = stm_i.dot(self._stm_i_1) # STM from t_(i-1) to t_0
+        self._stm_i_1 = stm_i
 
-        return xhat_i
+        return
+
+
+    def integrate(self, X_0, t_vec, rel_tol, abs_tol, params):
+        """
+        Integrate a trajectory using X_0 as initial condition and obtaining values at the time steps specified in the vector t_vec.
+        OVERRIDE THIS METHOD IF THE INTEGRATION OF A WHOLE BATCH FEATURE IS TO BE USED.
+        THE BATCH OF OBSERVATIONS CANNOT BE INTEGRATED ALL AT ONCE WHEN USING THE CKF BECAUSE
+        THE REFERENCE TRAJECTORY IS MODIFIED.
+        :param X_0:
+        :param t_vec:
+        :param rel_tol:
+        :param abs_tol:
+        :param params:
+        :return:
+        """
+        return None
+
+
+
 
     def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, start_using_EKF_at_obs = 0, Q = None):
         """
@@ -148,3 +234,5 @@ class ekfProc(ckfProc) :
         # End observation processing
 
         return (Xhat, xhat, P, prefit_res, postfit_res)
+
+

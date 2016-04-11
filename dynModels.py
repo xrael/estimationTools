@@ -67,21 +67,21 @@ class zonalHarmonicsModel(orbitalDynamicModelBase):
         X_symb = [x, y, z, x_dot, y_dot, z_dot]
         return X_symb
 
-    ## THIS IS THE METHOD TO OVERRIDE IF A CONSIDER PARAMETER ANALYSIS IS TO BE ACCOMPLISHED!!!
-    @classmethod
-    def buildSymbolicInput(cls):
-        """
-        Modify this method to build a new symbolic input vector (for control force or consider covariance analysis).
-        :return: A list with the symbolic symbols of the input.
-        """
-        # DEFAULT
-        J_3 = sp.symbols('J_3')
-        U_symb = [J_3]
-        return U_symb
+    # ## THIS IS THE METHOD TO OVERRIDE IF A CONSIDER PARAMETER ANALYSIS IS TO BE ACCOMPLISHED!!!
+    # @classmethod
+    # def buildSymbolicInput(cls):
+    #     """
+    #     Modify this method to build a new symbolic input vector (for control force or consider covariance analysis).
+    #     :return: A list with the symbolic symbols of the input.
+    #     """
+    #     # DEFAULT
+    #     J_3 = sp.symbols('J_3')
+    #     U_symb = [J_3]
+    #     return U_symb
 
-    def getInput(self, t):
-        J = self._params[2]
-        return J[3]
+    # def getInput(self, t):
+    #     J = self._params[2]
+    #     return J[3]
 
     ## -------------------------Public Interface--------------------------
     def computeModel(self, X, t, params, u = None):
@@ -410,7 +410,7 @@ class dragModel(orbitalDynamicModelBase):
 
         params = (CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot)
         symbState = dragModel.buildSymbolicState()
-        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        inputSymb = dragModel.buildSymbolicInput()
         drModel = dragModel(symbState, params, propagationFunction, inputSymb)
 
         return drModel
@@ -659,7 +659,7 @@ class solarRadiationPressureModel(orbitalDynamicModelBase):
         """
         params = (C_R, A_m_ratio, R_1AU, srp_flux, speed_light, JD_0, a_meeus, inc_ecliptic, mu_sun)
         symbState = solarRadiationPressureModel.buildSymbolicState()
-        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        inputSymb = solarRadiationPressureModel.buildSymbolicInput()
         srpModel = solarRadiationPressureModel(symbState, params, propagationFunction, inputSymb)
 
         return srpModel
@@ -937,7 +937,7 @@ class thirdBodyGravityModel(orbitalDynamicModelBase):
 
         params = (mu_third, JD_0, a_meeus, inc_ecliptic)
         symbState = thirdBodyGravityModel.buildSymbolicState()
-        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        inputSymb = thirdBodyGravityModel.buildSymbolicInput()
         thirdGravModel = thirdBodyGravityModel(symbState, params, propagationFunction, inputSymb)
 
         return thirdGravModel
@@ -1213,7 +1213,7 @@ class dragZonalHarmonicModel(orbitalDynamicModelBase):
         """
         params = (mu, R_E, J, CD_drag, A_drag, mass_sat, rho_0_drag, r0_drag, H_drag, theta_dot, include_two_body_dynamics)
         symbState = dragZonalHarmonicModel.buildSymbolicState()
-        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        inputSymb = dragZonalHarmonicModel.buildSymbolicInput()
         zonHarmDragMod = dragZonalHarmonicModel(symbState, params, propagationFunction, inputSymb)
 
         return zonHarmDragMod
@@ -1508,7 +1508,7 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         """
         params = (mu, R_E, J, mu_third, mu_sun, C_R, A_m_ratio, R_1AU, srp_flux, speed_light, JD_0, a_meeus, inc_ecliptic, include_two_body_dynamics)
         symbState = zonalHarmonicThirdBodySRPModel.buildSymbolicState()
-        inputSymb = zonalHarmonicsModel.buildSymbolicInput()
+        inputSymb = zonalHarmonicThirdBodySRPModel.buildSymbolicInput()
         zonHarmThirdSRPMod = zonalHarmonicThirdBodySRPModel(symbState, params, propagationFunction, inputSymb)
 
         return zonHarmThirdSRPMod
@@ -1526,8 +1526,9 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
 
         # ADDITIONAL STATES
         C_R = sp.symbols('C_R')
+        #a1, a2, a3 = sp.symbols('a1 a2 a3')
 
-        X_symb = [x, y, z, x_dot, y_dot, z_dot, C_R]
+        X_symb = [x, y, z, x_dot, y_dot, z_dot, C_R]#, a1, a2, a3]
         return X_symb
 
     ## -------------------------Public Interface--------------------------
@@ -1561,6 +1562,11 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         srp_flux = self._params[8]
         c = self._params[9]
         #---------------------------------
+
+        # a1 = X[states+1]
+        # a2 = X[states+1]
+        # a3 = X[states+2]
+        # states += 3
 
         x_sun_ref = params[0]
         y_sun_ref = params[1]
@@ -1614,6 +1620,11 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         y_dot = X[4]
         z_dot = X[5]
         states = 6
+
+        # a1 = X[states+1]
+        # a2 = X[states+1]
+        # a3 = X[states+2]
+        # states += 3
 
         # Change this part for adding more states
         mu = self._params[0]
@@ -1748,15 +1759,20 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         y_sun_ref = sp.symbols('y_sun_ref')
         z_sun_ref = sp.symbols('z_sun_ref')
 
+        # # bias parameters
+        # a1 = sp.symbols('a1')
+        # a2 = sp.symbols('a2')
+        # a3 = sp.symbols('a3')
+
         nmbrOfStates = self.getNmbrOfStates()
 
         self._modelSymb = []
         self._modelSymb.append(x_dot)
         self._modelSymb.append(y_dot)
         self._modelSymb.append(z_dot)
-        self._modelSymb.append(zonHarmSymbMod[3] + thirdBodySymbMod[3] + srpSymbMod[3])
-        self._modelSymb.append(zonHarmSymbMod[4] + thirdBodySymbMod[4] + srpSymbMod[4])
-        self._modelSymb.append(zonHarmSymbMod[5] + thirdBodySymbMod[5] + srpSymbMod[5])
+        self._modelSymb.append(zonHarmSymbMod[3] + thirdBodySymbMod[3] + srpSymbMod[3])# + a1)
+        self._modelSymb.append(zonHarmSymbMod[4] + thirdBodySymbMod[4] + srpSymbMod[4])# + a2)
+        self._modelSymb.append(zonHarmSymbMod[5] + thirdBodySymbMod[5] + srpSymbMod[5])# + a3)
 
         self._modelLambda = [0 for i in range(0, nmbrOfStates)]
 
@@ -1819,6 +1835,11 @@ class zonalHarmonicThirdBodySRPModel(orbitalDynamicModelBase):
         x_sun_ref = sp.symbols('x_sun_ref')
         y_sun_ref = sp.symbols('y_sun_ref')
         z_sun_ref = sp.symbols('z_sun_ref')
+
+        # # bias parameters
+        # a1 = sp.symbols('a1')
+        # a2 = sp.symbols('a2')
+        # a3 = sp.symbols('a3')
 
         nmbrOfStates = self.getNmbrOfStates()
 

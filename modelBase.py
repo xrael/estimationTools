@@ -456,6 +456,16 @@ class orbitalDynamicModelBase(dynamicModelBase):
     def usingDMC(self):
         return self._usingDMC
 
+    def getPNSTM(self, t_i_1, t_i):
+        delta_t = t_i - t_i_1
+        # Process Noise Transition Matrix with constant velocity approximation
+        pntm_i = np.zeros((self.getNmbrOfStates(), 3))
+        pntm_i[0:3, :] = delta_t**2/2 * np.eye(3)
+        pntm_i[3:6, :] = delta_t * np.eye(3)
+        #pntm_i[7:10, :] = 10.0 * np.eye(3)
+
+        return pntm_i
+
     def getSncCovarianceMatrix(self, t_i_1, t_i, state_i, Q_i_1):
         """
         Gets the Covariance matrix part associated to the SNC.
@@ -468,11 +478,13 @@ class orbitalDynamicModelBase(dynamicModelBase):
         :param Q_i_1: [2-dimension numpy array] Noise covariance at time t_i_1.
         :return: [2-dimension numpy array] The value PNSTM^T*Q*PNSTM, where Q is rotated to Inertial frame.
         """
-        delta_t = t_i - t_i_1
-        # Process Noise Transition Matrix with constant velocity approximation
-        pntm_i = np.zeros((self.getNmbrOfStates(), 3))
-        pntm_i[0:3, :] = delta_t**2/2 * np.eye(3)
-        pntm_i[3:6, :] = delta_t * np.eye(3)
+        # delta_t = t_i - t_i_1
+        # # Process Noise Transition Matrix with constant velocity approximation
+        # pntm_i = np.zeros((self.getNmbrOfStates(), 3))
+        # pntm_i[0:3, :] = delta_t**2/2 * np.eye(3)
+        # pntm_i[3:6, :] = delta_t * np.eye(3)
+
+        pntm_i = self.getPNSTM(t_i_1, t_i)
 
         Q_rot = self.transformCovariance(state_i, Q_i_1)
 

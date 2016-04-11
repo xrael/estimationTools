@@ -356,7 +356,7 @@ class sequentialFilterProc :
         for i in range(0, nmbrObs):
             postfit_obs_i = postfit[:,i]
             postfit_RMS = np.sqrt(np.sum(postfit_obs_i**2)/nmbrTotalObs)
-            plt.plot(obs_time_vec/3600, postfit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(postfit_RMS,3)) + ' ' +  units[i])
+            plt.plot(obs_time_vec/3600, postfit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(postfit_RMS,4)) + ' ' +  units[i])
         plt.axhline(3, color='k',linestyle='--')
         plt.axhline(-3, color='k',linestyle='--')
         plt.legend(prop={'size':8})
@@ -390,7 +390,7 @@ class sequentialFilterProc :
         for i in range(0, nmbrObs):
             prefit_obs_i = prefit[:,i]
             prefit_RMS = np.sqrt(np.sum(prefit_obs_i**2)/nmbrTotalObs)
-            plt.plot(obs_time_vec/3600, prefit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(prefit_RMS,3)) + ' ' +  units[i])
+            plt.plot(obs_time_vec/3600, prefit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(prefit_RMS,4)) + ' ' +  units[i])
         plt.axhline(3, color='k',linestyle='--')
         plt.axhline(-3, color='k',linestyle='--')
         plt.legend(prop={'size':8})
@@ -453,6 +453,25 @@ class sequentialFilterProc :
             plt.close()
 
         return
+
+    def plotStateEstimates(self, labels, filename, state_vec):
+
+        obs_time_vec = self._obs_time_vec
+        fig = plt.figure()
+        i = 0
+        for nmb in state_vec:
+            subp = int(str(len(state_vec)) + '1' + str(i + 1))
+            plt.subplot(subp)
+            plt.plot(obs_time_vec/3600, self._Xhat_vec[:,nmb], '-b')
+            plt.plot(obs_time_vec/3600, self._Xhat_vec[:,nmb], '.r')
+            plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
+            plt.ylabel(labels[i])
+            #plt.legend(prop={'size':8})
+            i += 1
+        plt.xlabel('Observation Time $[h]$')
+        plt.savefig(filename, bbox_inches='tight', dpi=300)
+        plt.close()
+
 
     def plotTrajectory(self,labels, filename, dividing_factor = 1):
 
