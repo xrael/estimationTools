@@ -10,7 +10,7 @@ It includes:
 - EKF.
 - UKF.
 - SRIF.
-with an interface ready to create new sequential filters.
+- Includes an interface ready to create new sequential filters.
 
 It also include models for orbit and attitude estimation problems:
 - Two-body dynamics.
