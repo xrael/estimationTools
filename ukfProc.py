@@ -13,16 +13,23 @@
 import numpy as np
 import numpy.matlib as matnp
 import dynamicSimulator as dynSim
-from ckfProc import ckfProc
+from sequentialFilter import sequentialFilterProc
 import scipy.linalg as splin
 
-class ukfProc(ckfProc):
+class ukfProc(sequentialFilterProc):
     """
     Unscented Kalman Filter Processor (UKF).
     """
 
+    ##-----------------Attributes---------------
+    _weights_mean = None
+    _weights_covariance = None
+    _gamma_p = 0
+    _sigma_points_i_1 = None
+    ##------------------------------------------
+
     def __init__(self):
-        ckfProc.__init__(self)
+        sequentialFilterProc.__init__(self)
 
         self._weights_mean = None
         self._weights_covariance = None
@@ -32,32 +39,24 @@ class ukfProc(ckfProc):
 
         return
 
-    def configureFilter(self, X_0, Pbar_0, t_0, alpha, beta):
+    def configureFilter(self, X_0, Pbar_0, t_0):
         """
-        Before computing the kalman solution, call this method.
-        :param Xref_0: [1-dimensional numpy array] Initial guess of the state.
-        :param xbar_0: [1-dimensional numpy array] Deviation from the initial guess (usually 0).
+        Before computing the UKF solution, call this method.
+        :param Xbar_0: [1-dimensional numpy array] Initial guess of the state.
         :param Pbar_0: [2-dimensional numpy array] A-priori covariance.
         :param t_0: [double] Initial time.
-        :param joseph_flag: [boolean] Set to true to propagate the covariance using Joseph Formulation.
         :return:
         """
         # Initial data
-        self._X_0 = X_0
-        self._Pbar_0 = Pbar_0
-        self._t_0 = t_0
-
-        self._t_i_1 = t_0
-        self._Xhat_i_1 = X_0
-        self._P_i_1 = Pbar_0
-        #self._Pbar_i_1 = Pbar_0
-
-        self._prefit_residual = None
-        self._postfit_residual = None
+        sequentialFilterProc.configureFilter(self, X_0, Pbar_0, t_0)
 
         n = self._dynModel.getNmbrOfStates()
         self._weights_mean = np.zeros(2*n+1)
         self._weights_covariance = np.zeros(2*n+1)
+
+        # DEFAULT alpha and beta
+        alpha = 1.0
+        beta = 2.0
 
         kappa_p = 3 - n
         lambda_p = alpha**2 * (n + kappa_p) - n
@@ -71,9 +70,32 @@ class ukfProc(ckfProc):
 
         return
 
-    def computeNextEstimate(self, t_i, Y_i, obs_params, R_i, dt, rel_tol, abs_tol, Q_i_1 = None):
+    def setAlphaBeta(self, alpha, beta):
         """
-        This method can be called in real time to get the next estimation deviation associated to the current observation.
+        alpha = 1.0, beta = 2.0 are used as default. Use this method to change this values
+        :param alpha:
+        :param beta:
+        :return:
+        """
+        n = self._dynModel.getNmbrOfStates()
+
+        kappa_p = 3 - n
+        lambda_p = alpha**2 * (n + kappa_p) - n
+        self._gamma_p = np.sqrt(n + lambda_p)
+
+        self._weights_mean[0] = lambda_p / (n + lambda_p)
+        self._weights_covariance[0] = lambda_p / (n + lambda_p) + (1 - alpha**2  + beta)
+
+        self._weights_mean[1:] = 1.0/(2*(n + lambda_p))
+        self._weights_covariance[1:] = 1.0/(2*(n + lambda_p))
+
+        return
+
+    def computeNextEstimate(self, i, t_i, Y_i, obs_params, R_i, dt,  rel_tol = 1e-12, abs_tol = 1e-12, refTrajectory = None, Q_i_1 = None):
+        """
+        This works as an interface between the computeNextEstimate() interface defined in the sequential filter interface
+        and the computeNextEstimateEKF().
+        :param i: [int] Number of observation.
         :param t_i: [double] Next observation time.
         :param Y_i: [1-dimension numpy array] Observations at time t_i.
         :param obs_params: [tuple] Non-static observation parameters.
@@ -81,8 +103,8 @@ class ukfProc(ckfProc):
         :param dt: [double] time step in advancing from t_i_1 to t_i.
         :param rel_tol: relative tolerance of the integrator.
         :param abs_tol: absolute tolerance of the integrator.
-        :param useEKF: [Boolean] Used to switch between CKF (False) and EKF (True) propagation.
-        :param Q_i_1: [2-dimensional numpy array] Process noise covariance.
+        :param refTrajectory: NOT USED IN THE UKF.
+        :param Q_i_1: [2-dimensional numpy array] Process noise covariance (or Power Spectral Density, depends on the function used).
         :return:
         """
         params = ()
@@ -95,11 +117,6 @@ class ukfProc(ckfProc):
         Y_mean = np.zeros(m)
         sigma_points_i = np.zeros((s_nmbr, n))
         obs_sigma_points = np.zeros((s_nmbr, m))
-
-        print t_i
-
-        if t_i == 110:
-            print t_i
 
         self._sigma_points_i_1 = self.computeSigmaPoints(self._Xhat_i_1, self._P_i_1, self._gamma_p)
 
@@ -141,27 +158,31 @@ class ukfProc(ckfProc):
             aux_col = sigma_points_i[i] - Xbar_i
             Pbar_i = Pbar_i + np.outer(aux_col, aux_col) * self._weights_covariance[i]
 
-        if self._dynModel.usingSNC() and Q_i_1 is not None:
-            # Process Noise Transition Matrix with constant velocity approximation
-            Q = self._dynModel.getSncCovarianceMatrix(self._t_i_1, t_i, Xbar_i, Q_i_1) # xbar_i should be 0 in the EKF
-            Pbar_i = Pbar_i + Q
-            # sigma_points_i = self.computeSigmaPoints(Xbar_i, Pbar_i, self._gamma_p)
-            # sigma_points_mat = np.reshape(sigma_points_i,(2*n + 1, n)).T
-        elif self._dynModel.usingDMC() and Q_i_1 is not None:
-            Q = self._dynModel.getSmcCovarianceMatrix(self._t_i_1, t_i, Q_i_1)
-            Pbar_i = Pbar_i + Q
+        if self._dynModel.usingNoiseCompensation():
+                Q = self._dynModel.computeNoiseCovariance(self._t_i_1, t_i, Xbar_i, Q_i_1, params)
+                Pbar_i = Pbar_i + Q
 
+        # if self._dynModel.usingSNC() and Q_i_1 is not None:
+        #     # Process Noise Transition Matrix with constant velocity approximation
+        #     Q = self._dynModel.getSncCovarianceMatrix(self._t_i_1, t_i, Xbar_i, Q_i_1) # xbar_i should be 0 in the EKF
+        #     Pbar_i = Pbar_i + Q
+        #     # sigma_points_i = self.computeSigmaPoints(Xbar_i, Pbar_i, self._gamma_p)
+        #     # sigma_points_mat = np.reshape(sigma_points_i,(2*n + 1, n)).T
+        # elif self._dynModel.usingDMC() and Q_i_1 is not None:
+        #     Q = self._dynModel.getSmcCovarianceMatrix(self._t_i_1, t_i, Q_i_1)
+        #     Pbar_i = Pbar_i + Q
+
+        # Recompute the sigma points to incorporate process noise
         sigma_points_i = self.computeSigmaPoints(Xbar_i, Pbar_i, self._gamma_p)
         #sigma_points_mat = np.reshape(sigma_points_i,(2*n + 1, n)).T
 
         # Read Observation
-        obP = obs_params
 
         # Measurement update
         # obs_sigma_points = self._obsModel.computeModelFromManyStates(sigma_points_i, t_i, obP)
 
         for i in range(0, s_nmbr):
-            obs_sigma_points[i,:] = self._obsModel.computeModel(sigma_points_i[i], t_i, obP)
+            obs_sigma_points[i,:] = self._obsModel.computeModel(sigma_points_i[i], t_i, obs_params)
 
         #obs_sigma_points_mat = np.reshape(obs_sigma_points,(2*n+1, m)).T # Each sigma point in a column
         for i in range(0, s_nmbr):
@@ -203,44 +224,44 @@ class ukfProc(ckfProc):
 
         return self._Xhat_i_1
 
-    def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q = None):
-        """
-        Process all observations together using this method.
-        :param obs_vector:
-        :param obs_time_vector:
-        :param obs_params:
-        :param R:
-        :param dt:
-        :param rel_tol:
-        :param abs_tol:
-        :param Q: [2-dim numpy array] Process noise covariance.
-        :return:
-        """
-        nmbrObsAtEpoch = np.shape(obs_vector)[1]
-        nmbrObs = np.size(obs_time_vector)
-        nmbrStates = self._dynModel.getNmbrOfStates()
-
-        Xhat = np.zeros((nmbrObs, nmbrStates))
-        P = np.zeros((nmbrObs, nmbrStates, nmbrStates))
-        prefit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
-        postfit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
-
-        for i in range(0, nmbrObs): # Iteration for every observation
-            t_i = obs_time_vector[i]
-            Y_i = obs_vector[i]
-            Q_i = None
-            if Q is not None and i >= 1: # Only use process noise if the gap in time is not too big
-                if t_i - obs_time_vector[i-1] <= 100:
-                    Q_i = Q
-
-            self.computeNextEstimate(t_i, Y_i, obs_params[i], R, dt, rel_tol, abs_tol, Q_i)
-            Xhat[i, :] = self.getNonLinearEstimate()
-            P[i, :, :] = self.getCovarianceMatrix()
-            prefit_res[i,:] = self.getPreFitResidual()
-            postfit_res[i,:] = self.getPostFitResidual()
-        # End observation processing
-
-        return (Xhat, P, prefit_res, postfit_res)
+    # def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q = None):
+    #     """
+    #     Process all observations together using this method.
+    #     :param obs_vector:
+    #     :param obs_time_vector:
+    #     :param obs_params:
+    #     :param R:
+    #     :param dt:
+    #     :param rel_tol:
+    #     :param abs_tol:
+    #     :param Q: [2-dim numpy array] Process noise covariance.
+    #     :return:
+    #     """
+    #     nmbrObsAtEpoch = np.shape(obs_vector)[1]
+    #     nmbrObs = np.size(obs_time_vector)
+    #     nmbrStates = self._dynModel.getNmbrOfStates()
+    #
+    #     Xhat = np.zeros((nmbrObs, nmbrStates))
+    #     P = np.zeros((nmbrObs, nmbrStates, nmbrStates))
+    #     prefit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
+    #     postfit_res = np.zeros((nmbrObs, nmbrObsAtEpoch))
+    #
+    #     for i in range(0, nmbrObs): # Iteration for every observation
+    #         t_i = obs_time_vector[i]
+    #         Y_i = obs_vector[i]
+    #         Q_i = None
+    #         if Q is not None and i >= 1: # Only use process noise if the gap in time is not too big
+    #             if t_i - obs_time_vector[i-1] <= 100:
+    #                 Q_i = Q
+    #
+    #         self.computeNextEstimate(t_i, Y_i, obs_params[i], R, dt, rel_tol, abs_tol, Q_i)
+    #         Xhat[i, :] = self.getNonLinearEstimate()
+    #         P[i, :, :] = self.getCovarianceMatrix()
+    #         prefit_res[i,:] = self.getPreFitResidual()
+    #         postfit_res[i,:] = self.getPostFitResidual()
+    #     # End observation processing
+    #
+    #     return (Xhat, P, prefit_res, postfit_res)
 
 
     def computeSigmaPoints(cls, X, P, gamma):
@@ -260,3 +281,18 @@ class ukfProc(ckfProc):
         # sigma_points = np.concatenate((X, aux1, aux2))
 
         return sigma_points
+
+    def integrate(self, X_0, t_vec, rel_tol, abs_tol, params):
+        """
+        Integrate a trajectory using X_0 as initial condition and obtaining values at the time steps specified in the vector t_vec.
+        OVERRIDE THIS METHOD IF THE INTEGRATION OF A WHOLE BATCH FEATURE IS TO BE USED.
+        THE BATCH OF OBSERVATIONS CANNOT BE INTEGRATED ALL AT ONCE WHEN USING THE CKF BECAUSE
+        THE REFERENCE TRAJECTORY IS MODIFIED.
+        :param X_0:
+        :param t_vec:
+        :param rel_tol:
+        :param abs_tol:
+        :param params:
+        :return:
+        """
+        return None

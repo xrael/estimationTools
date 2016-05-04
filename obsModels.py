@@ -5,6 +5,10 @@
 #
 # These classes compute symbollically and numerically
 # observation models and their derivatives.
+#
+# Includes:
+# - Range and Range rate.
+# - Right Ascension and Declination.
 ######################################################
 
 from modelBase import observerModelBase

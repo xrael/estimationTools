@@ -17,6 +17,7 @@
 
 import numpy as np
 from scipy.integrate import odeint
+from integrators import rk4Integrator, Integrator
 
 class dynamicSimulator:
     """
@@ -30,18 +31,24 @@ class dynamicSimulator:
         self._statesVec = None
         self._timeVec = None
 
+        self._integrator = None
+        self._integratorEventHandler = None
+
         return
 
     @classmethod
-    def getDynamicSimulator(cls, dynModel):
+    def getDynamicSimulator(cls, dynModel, integrator = Integrator.ODEINT, integratorEventHandler = None):
         """
         Factory method used to get an instance of the class.
         :param dynModel: Interface dynModel.
+        :param integrator: [Integrator] Enum that indicates the integrator to be used. Check the Integrator Enum to see what integrators are available.
+        :param integratorEventHandler: [func] Function used by some integrators to handle events.
         :return: An instance of this class.
         """
         dynSim = dynamicSimulator()
-
         dynSim._dynModel = dynModel
+        dynSim._integrator = integrator
+        dynSim._integratorEventHandler = integratorEventHandler
 
         return dynSim
 
@@ -59,7 +66,7 @@ class dynamicSimulator:
         """
         return self._timeVec
 
-    def propagate(self, initialState, params, t0, tf, dt, rtol, atol):
+    def propagate(self, initialState, params, t0, tf, dt, rtol = 1e-12, atol = 1e-12):
         """
         Simulate the model X_dot = F(X, t).
         Cannot be used to propagate X_dot = F(X, u, t) if u = u(t).
@@ -75,16 +82,19 @@ class dynamicSimulator:
 
         num = int((tf - t0)/dt) + 1
         tf = (num - 1) * dt + t0 # includes the last value
-        time = np.linspace(t0, tf, num)
+        time_vec = np.linspace(t0, tf, num)
 
         modelFunc = self._dynModel.getPropagationFunction()
 
-        self._statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
-        self._timeVec = time
+        if self._integrator == Integrator.RK4:
+            self._statesVec = rk4Integrator(modelFunc, initialState, time_vec, args = (params,), event = self._integratorEventHandler)
+        else:
+            self._statesVec = odeint(modelFunc, initialState, time_vec, args = (params,), rtol = rtol, atol = atol)
+        self._timeVec = time_vec
 
         return (self._timeVec, self._statesVec)
 
-    def propagateManyStateVectors(self, initialState, params, t0, dt, tf, rtol, atol):
+    def propagateManyStateVectors(self, initialState, params, t0, dt, tf, rtol = 1e-12, atol = 1e-12):
         """
         Propagates p state vectors in parallel.
         :param initialState: [1-dimensional numpy array] Contains p initial state vectors in only 1 array.
@@ -98,19 +108,22 @@ class dynamicSimulator:
         """
         num = int((tf - t0)/dt) + 1
         tf = (num - 1) * dt + t0 # includes the last value
-        time = np.linspace(t0, tf, num)
+        time_vec = np.linspace(t0, tf, num)
 
         modelFunc = self._dynModel.getPropagationFunction()
 
-        statesVec = odeint(modelFunc, initialState, time, args = (params,), rtol = rtol, atol = atol)
-        timeVec = time
+        if self._integrator == Integrator.RK4:
+            statesVec = rk4Integrator(modelFunc, initialState, time_vec, args = (params,), event = self._integratorEventHandler)
+        else:
+            statesVec = odeint(modelFunc, initialState, time_vec, args = (params,), rtol = rtol, atol = atol)
+        timeVec = time_vec
 
         final_state = statesVec[-1]
 
         return (timeVec, statesVec, final_state)
 
 
-    def propagateWithSTM(self, initial_state, initial_stm, params, t0, dt, tf, rtol, atol):
+    def propagateWithSTM(self, initial_state, initial_stm, params, t0, dt, tf, rtol = 1e-12, atol = 1e-12):
         """
         Simulate the model X_dot = F(X,t), propagating X(t) and the State Transition Matrix (STM).
         It can also simulate the model X_dot = F(X,u,t), propagating X(t), the STM=dX(t)/dX(t_0) and STM_input=dX(t)/du(t_0).
@@ -129,7 +142,7 @@ class dynamicSimulator:
         """
         num = int((tf - t0))/dt + 1
         tf = (num - 1) * dt + t0 # includes the last value
-        timeVec = np.linspace(t0, tf, num)
+        time_vec = np.linspace(t0, tf, num)
 
         state_length = initial_state.size
         stm_shape = initial_stm.shape
@@ -140,7 +153,11 @@ class dynamicSimulator:
         #modelPlusSTMFunc = self._dynModel.getModelPlusSTMFunction()
 
         X0 = np.concatenate([initial_state, initial_stm.T.reshape(stm_length)]) # STM reshaped by columns
-        X = odeint (modelPlusSTMFunc, X0, timeVec, args = (params,), rtol = rtol, atol = rtol)
+
+        if self._integrator == Integrator.RK4:
+            X = rk4Integrator(modelPlusSTMFunc, X0, time_vec, args = (params,), event = self._integratorEventHandler)
+        else:
+            X = odeint(modelPlusSTMFunc, X0, time_vec, args = (params,), rtol = rtol, atol = atol)
 
         Xf = X[-1] # last state
 
@@ -161,10 +178,10 @@ class dynamicSimulator:
 
         states = X[:,0:state_length]
 
-        return (states, stms, timeVec, final_state, final_stm)
+        return (states, stms, time_vec, final_state, final_stm)
 
 
-    def propagateWithSTMtimeVec(self, initial_state, initial_stm, params, time_vec, rtol, atol):
+    def propagateWithSTMtimeVec(self, initial_state, initial_stm, params, time_vec, rtol = 1e-12, atol = 1e-12):
         """
         Simulate the model X_dot = F(X,t), propagating X(t) and the State Transition Matrix (STM).
         The STM equation is STM_dot = A(t)*STM, where A(t) is the Jacobian of F.
@@ -175,6 +192,7 @@ class dynamicSimulator:
         :param time_vec: Time vector.
         :param rtol: Relative tolerance of the integrator.
         :param atol: Absolute tolerance of the integrator.
+        :param event: Function to handle events within the integrator
         :return:
         """
 
@@ -186,7 +204,11 @@ class dynamicSimulator:
         modelPlusSTMFunc = self._dynModel.getPropagationFunction()
 
         X0 = np.concatenate([initial_state, initial_stm.T.reshape(stm_length)]) # STM reshaped by columns
-        X = odeint (modelPlusSTMFunc, X0, time_vec, args = (params,), rtol = rtol, atol = rtol)
+
+        if self._integrator == Integrator.RK4:
+            X = rk4Integrator(modelPlusSTMFunc, X0, time_vec, args = (params,), event = self._integratorEventHandler)
+        else:
+            X = odeint(modelPlusSTMFunc, X0, time_vec, args = (params,), rtol = rtol, atol = atol)
 
         Xf = X[-1] # last state
 
@@ -208,4 +230,3 @@ class dynamicSimulator:
         states = X[:,0:state_length]
 
         return (states, stms, time_vec, final_state, final_stm)
-

@@ -9,7 +9,8 @@ import sympy as sp
 #
 # This class is a base for all classes which compute
 # functions of a state and time F(X,t)
-# or the state, time, and an external signal u F(x,u,t).
+# or the state, time, and an external signal u F(x,u,t)
+# or the state, time, external deterministic signal u and noise w F(x, u, w, t).
 # This is useful for consider analysis and control force modeling
 #
 # The interface is:
@@ -44,6 +45,8 @@ class modelBase:
     _jacobianLambda = None
     _jacobianInputSymb = None
     _jacobianInputLambda = None
+    _jacobianNoiseSymb = None
+    _jacobianNoiseLambda = None
     _stateSymb = None
     _inputSymb = None
     _name = ""
@@ -51,6 +54,9 @@ class modelBase:
     _computeModelFromManyStatesFunc = None
     _computeModelPlusSTMFunc = None
     _propFunction = None
+    _noiseFlag = False
+    _whiteNoiseMean = 0
+    _whiteNoiseCovariance = 0
     ##------------------------------------------
 
     def __init__(self, name, stateSymb, params, propagationFunction = 'F', inputSymb = None):
@@ -72,9 +78,13 @@ class modelBase:
         else:
             self._inputSymb = inputSymb
         self._params = params
+        self._noiseFlag = False
+        self._whiteNoiseMean = 0
+        self._whiteNoiseCovariance = 0
         self.computeSymbolicModel()
         self.computeSymbolicJacobian()
         self.computeSymbolicInputJacobian()
+        self.computeSymbolicNoiseJacobian()
 
         self._computeModelFunc = lambda X, t, params : self.computeModel(X, t, params)
         self._computeModelFromManyStatesFunc = lambda X, t, params: self.computeModelFromManyStates(X, t, params)
@@ -134,6 +144,16 @@ class modelBase:
     :param u: [1-dimension numpy vector] Input variable (control force or consider parameters).
     """
     def computeInputJacobian(self, X, t, params, u):
+        return None
+
+    """
+    Numerically computes the noise jacobian dF/dw(X,u,w,t)
+    :param X: [1-dimension numpy vector] State.
+    :param t: [double] Time.
+    :param params: [tuple] Variable parameters.
+    :param u: [1-dimension numpy vector] Input variable (control force or consider parameters).
+    """
+    def computeNoiseJacobian(self, X, t, params, u):
         return None
 
     """
@@ -198,6 +218,7 @@ class modelBase:
         self.computeSymbolicModel()
         self.computeSymbolicJacobian()
         self.computeSymbolicInputJacobian()
+        self.computeSymbolicNoiseJacobian()
 
         return
 
@@ -215,6 +236,7 @@ class modelBase:
         self.computeSymbolicModel()
         self.computeSymbolicJacobian()
         self.computeSymbolicInputJacobian()
+        self.computeSymbolicNoiseJacobian()
 
         return
 
@@ -264,6 +286,43 @@ class modelBase:
         :param t: [double] Time.
         :param params: [tuple] Variable parameters.
         :return: [1-dimension numpy array] The output of [F(X,t), STM] in a vector.
+        """
+        nmbrStates = self.getNmbrOfStates()
+        nmbrInputs = self.getNmbrInputs()
+
+        if nmbrInputs > 0:
+            u = self.getInput(t)
+            dX = self.computeModel(X, t, params, u)
+            A = self.computeJacobian(X, t, params, u)
+            #B = self.computeInputJacobian(X, t, params, u)
+        else:
+            dX = self.computeModel(X, t, params)
+            A = self.computeJacobian(X, t, params)
+            #B = 0
+
+        for i in range(0, nmbrStates):  # loop for each STM column vector (phi)
+            phi = X[(nmbrStates + nmbrStates*i):(nmbrStates + nmbrStates + nmbrStates*i):1]
+            dphi = A.dot(phi)
+            dX = np.concatenate([dX, dphi])
+
+        # for i in range(0, nmbrInputs): # loop for each STM_input column vector (theta)
+        #     # dim(theta) = nmbrStates x numberInputs
+        #     theta = X[(nmbrStates*(nmbrStates+1) + nmbrStates*i):(nmbrStates*(nmbrStates+1) + nmbrStates + nmbrStates*i):1]
+        #     dtheta = A.dot(theta) + B[:,i]
+        #
+        #     dX = np.concatenate([dX, dtheta])
+
+        return dX
+
+    def computeModelPlusSTMplusInputTMFunction(self, X, t, params):
+        """
+        Computes the function [F(X,t), STM, ITM] which is useful for propagating X and the STM in
+        [X_dot, STM_dot, ITM_dot] = [F(X,t), STM, ITM]
+        ITM (Input Transition Matrix) is useful for consider analysis.
+        :param X: [1-dimension numpy array] State.
+        :param t: [double] Time.
+        :param params: [tuple] Variable parameters.
+        :return: [1-dimension numpy array] The output of [F(X,t), STM, ITM] in a vector.
         """
         nmbrStates = self.getNmbrOfStates()
         nmbrInputs = self.getNmbrInputs()
@@ -341,6 +400,50 @@ class modelBase:
         """
         return len(self._inputSymb)
 
+    def addAdditiveNoise(self):
+        """
+        Return a flag that indicates if additive noise is used.
+        :return:
+        """
+        return self._noiseFlag
+
+    def setNoise(self, flag, whiteNoiseMean, whiteNoiseCovariance, otherParams = None):
+        """
+        Set Noise model. Additive white noise as default.
+        otherParams is used if more complex models are to be used. In that case, this method has to be OVERRIDEN.
+        :param flag: [boolean] Turn the additive oise on/off.
+        :param whiteNoiseMean:
+        :param whiteNoiseCovariance:
+        :param otherParams:
+        :return:
+        """
+        self._noiseFlag = flag
+        self._whiteNoiseMean = whiteNoiseMean
+        self._whiteNoiseCovariance = whiteNoiseCovariance
+        return
+
+    def noiseModel(self):
+        """
+        Returns an additive white gaussian noise model.
+        This is to be used by a simulator class, where the noise is summed to the output of the model.
+        This method has to be OVERRRIDEN if more complex models are to be used.
+        :return:
+        """
+        if self._noiseFlag:
+            return np.random.multivariate_normal(self._whiteNoiseMean, self._whiteNoiseCovariance)
+        else:
+            return np.zeros(self.getNmbrOutputs())
+
+    ### I THINK THIS CODE SHOULD BE SOMEWHERE ELSE-----------------
+    def normalizeOutput(self, out):
+        """
+        OVERRIDE this method if the output of the model has to be normalized in any way.
+        :param out:
+        :return:
+        """
+        return None
+    ### ------------------------------------------------------------
+
 
     ## ------------------------Private Methods---------------------------
     @abstractmethod
@@ -353,6 +456,10 @@ class modelBase:
     def computeSymbolicInputJacobian(self):
         return None
 
+    # OVERRIDE IF THE MODEL HAS AN INPUT NOISE w(t).
+    def computeSymbolicNoiseJacobian(self):
+        return None
+
 
 ######################################################
 # dynamicModelBase
@@ -360,20 +467,76 @@ class modelBase:
 # Manuel F. Diaz Ramos
 #
 # This class is a base for all classes which compute
-# function dynamic models X_dot = F(X,t).
+# function dynamic models X_dot = F(X, u, w,t).
+# X: state, u: deterministic input, w: stochastic input.
 ######################################################
 class dynamicModelBase(modelBase):
     """
-    Base class of every dynamic model F(X,t).
+    Base class of every dynamic model F(X, u, w,t).
     """
     __metaclass__ = ABCMeta
 
+    _noiseCompensationFlag = False
+    computeNoiseCovariance = None
+
     def __init__(self, name, stateSymb, params, propagationFunction, inputSymb):
         super(dynamicModelBase, self).__init__(name, stateSymb, params, propagationFunction, inputSymb)
+        self._noiseCompensationFlag = False
+        self.computeNoiseCovariance = None # Function to compute the noise covariance
         return
 
     def getNmbrOutputs(self):
         return self.getNmbrOfStates() # it's the same for a dynamical model!
+
+
+    ### I THINK THIS CODE SHOULD BE SOMEWHERE ELSE-----------------
+    def normalizeCovariance(self, X, P):
+        """
+        OVERRIDE to change the covariance if the state changes (MRP switching).
+        :param X:
+        :param P:
+        :return:
+        """
+        return None
+    ### ------------------------------------------------------------
+
+    def setNoiseCompensation(self, flag):
+        self._noiseCompensationFlag = flag
+        if flag == True:
+            self.computeNoiseCovariance = self.computeConstantSTMNoiseCovariance
+        else:
+            self.computeNoiseCovariance = None
+        return
+
+    def usingNoiseCompensation(self):
+        """
+        Some kind of compensation is used.
+        :return:
+        """
+        return self._noiseCompensationFlag
+
+    def computeConstantSTMNoiseCovariance(self, t_i_1, t_i, X_i, Q_i, params):
+        """
+        Computes the noise covariance Q_k: P_k+1 = phi*P_k*phi^T + Q_k.
+        It uses a constant phi approximation (Crassidis-Junkins Section 3.4.2)
+        :param X:
+        :param t_i_1:
+        :param t_i:
+        :param params:
+        :param u:
+        :param Q: [2-dimensional numpy array] It's a noise Power Spectral Density (PSD) matrix, it's not a covariance!
+        :return:
+        """
+        u = self.getInput(t_i)
+        G = self.computeNoiseJacobian(X_i, t_i, params, u)
+
+        nmbOutputs = self.getNmbrOutputs()
+
+        if G == None:
+            return np.zeros([nmbOutputs,nmbOutputs])
+        else:
+            return (G.dot(Q_i).dot(G.T) * (t_i - t_i_1))
+
 
 ######################################################
 # orbitalDynamicModelBase
@@ -415,7 +578,9 @@ class orbitalDynamicModelBase(dynamicModelBase):
         """
         self._process_noise_frame = process_noise_frame
         self._usingSNC = useSNC
+        self._noiseCompensationFlag = useSNC
         if useSNC == True:
+            self.computeNoiseCovariance = self.getSncCovarianceMatrix # The noise covariance is computed using SNC
             if self._usingDMC == True:
                 self._stateSymb.pop()
                 self._stateSymb.pop()
@@ -423,6 +588,8 @@ class orbitalDynamicModelBase(dynamicModelBase):
                 self._DMCbeta = None
                 self.defineSymbolicState(self._stateSymb)
                 self._usingDMC = False
+        else:
+            self.computeNoiseCovariance = None
         return
 
     def useDynamicModelCompensation(self, useDMC, beta):
@@ -432,14 +599,17 @@ class orbitalDynamicModelBase(dynamicModelBase):
         :param beta: [2-dimension numpy array] Diagonal matrix with the inverse of the time constants for DMC.
         :return:
         """
+        self._noiseCompensationFlag = useDMC
         if useDMC == True:
             self._usingSNC = False
+            self.computeNoiseCovariance = self.getDmcCovarianceMatrix # The noise covariance is computed using DMC
             if self._usingDMC == False:
                 self._usingDMC = True
                 self._DMCbeta = beta
                 w_x, w_y, w_z = sp.symbols('w_x w_y w_z')
                 self.defineSymbolicState(self._stateSymb + [w_x, w_y, w_z])
         else: # useDMC == False
+            self.computeNoiseCovariance = None
             if self._usingDMC == True:
                 self._usingDMC = False
                 self._stateSymb.pop()
@@ -466,7 +636,7 @@ class orbitalDynamicModelBase(dynamicModelBase):
 
         return pntm_i
 
-    def getSncCovarianceMatrix(self, t_i_1, t_i, state_i, Q_i_1):
+    def getSncCovarianceMatrix(self, t_i_1, t_i, state_i, Q_i_1, params):
         """
         Gets the Covariance matrix part associated to the SNC.
         Assumes that the noise is added to acceleration.
@@ -490,9 +660,9 @@ class orbitalDynamicModelBase(dynamicModelBase):
 
         return pntm_i.dot(Q_rot).dot(pntm_i.T)
 
-    def getSmcCovarianceMatrix(self, t_i_1, t_i, Q_i_1):
+    def getDmcCovarianceMatrix(self, t_i_1, t_i, state_i, Q_i_1, params):
         """
-        Computes the SMC covariance using the constant-velocity approximation.
+        Computes the DMC covariance using the constant-velocity approximation.
         :param t_i_1:
         :param t_i:
         :param Q_i_1:
@@ -552,6 +722,28 @@ class orbitalDynamicModelBase(dynamicModelBase):
 
 
 ######################################################
+# AttitudeModelBase
+#
+# Manuel F. Diaz Ramos
+#
+# This class is a base for all classes which compute
+# function dynamic models X_dot = F(X,t), where
+# the state is 3 attitude parameters and angular velocities.
+# The minimum number of states is 6, being these attitude
+# and angular velocity.
+######################################################
+class attitudeModelBase(dynamicModelBase):
+    """
+    Base class of every orbit dynamic model F(X,t).
+    """
+    __metaclass__ = ABCMeta
+
+    def __init__(self, name, stateSymb, params, propagationFunction, inputSymb):
+        super(attitudeModelBase, self).__init__(name, stateSymb, params, propagationFunction, inputSymb)
+        return
+
+
+######################################################
 # observerBase
 #
 # Manuel F. Diaz Ramos
@@ -563,7 +755,7 @@ class observerModelBase(modelBase):
     """
     Base class of every observation model G(X,t).
     Every observation model has, at least, one set of coordinates against which
-    the observations is measured.
+    the observations are measured.
     """
     __metaclass__ = ABCMeta
 
@@ -574,7 +766,10 @@ class observerModelBase(modelBase):
     def __init__(self, name, stateSymb, params, observerCoordinates, inputSymb):
         super(observerModelBase, self).__init__(name, stateSymb, params, propagationFunction = 'F', inputSymb=inputSymb) # Observer models just use the model function 'G'
 
-        self._nmbrCoordinates = observerCoordinates.shape[0]
+        if observerCoordinates == None:
+            self._nmbrCoordinates = 1
+        else:
+            self._nmbrCoordinates = len(observerCoordinates) #.shape[0] # Number of different observers (e.g. number of ground stations)
         self._observerCoordinates = observerCoordinates
         return
 
@@ -592,6 +787,15 @@ class observerModelBase(modelBase):
         Returns the number of observers (number of sets of coordinates).
         """
         return self._nmbrCoordinates
+
+    def normalizePrefitResiduals(self, y_prefit, Y_obs, Y_computed):
+        """
+        OVERRIDE to change the way the postfit residuals are computed
+        :param Y_obs:
+        :param Y_computed:
+        :return:
+        """
+        return None
 
     """
     Method that computes if the state can be observed for a given time and given the coordinates of the observer.

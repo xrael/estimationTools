@@ -131,7 +131,7 @@ class considerParamsCkfProc(ckfProc) :
             n = self._Xref_i_1.size # nmbr of states
             if refTrajectory is None: # Integrate
                 stms_i_1 = np.concatenate((self._I, self._zeroMat), axis=1) # [STM | STM_input]
-                (states, stms, time, Xref_i, stms_i)  = self._dynSim.propagateWithSTM(self._Xref_i_1, stms_i_1, params,
+                (states, stms, time, Xref_i, stms_i)  = self._dynSim.computeModelPlusSTMplusInputTMFunction(self._Xref_i_1, stms_i_1, params,
                                                                                  self._t_i_1, dt, t_i, rel_tol, abs_tol)
 
                 stm_i = stms_i[:n,:n]

@@ -22,8 +22,10 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import dynamicSimulator as dynSim
+from integrators import Integrator
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import printing
 
 class sequentialFilterProc :
     """
@@ -88,11 +90,13 @@ class sequentialFilterProc :
 
     # Factory method. Use this to get an instance!
     @classmethod
-    def getFilter(cls, dynModel, obsModel):
+    def getFilter(cls, dynModel, obsModel, integrator = Integrator.ODEINT, integratorEventHandler = None):
         """
         Factory method to get an instantiation of the class.
         :param dynModel: [dynamicModelBase] Object that implements a dynamic model interface.
         :param obsModel: [observerModelBase] Object that implements an observer model interface.
+        :param integrator: [Integrator] Integrator to be used. ODEINT as default. Check the Enum "Integrator" to see what integrators are available.
+        :param integratorEventHandler: [func] Function used by some integrators to handle events.
         :return:
         """
         proc = cls()
@@ -103,7 +107,7 @@ class sequentialFilterProc :
         proc._dynModel = dynModel
         proc._obsModel = obsModel
 
-        proc._dynSim = dynSim.dynamicSimulator.getDynamicSimulator(dynModel)
+        proc._dynSim = dynSim.dynamicSimulator.getDynamicSimulator(dynModel, integrator, integratorEventHandler)
 
         return proc
 
@@ -139,7 +143,7 @@ class sequentialFilterProc :
 
         return
 
-    def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol, abs_tol, Q = None):
+    def processAllObservations(self, obs_vector, obs_time_vector, obs_params, R, dt, rel_tol = 1e-12, abs_tol = 1e-12, Q = None):
         """
         Process all observations together using this method.
         :param obs_vector: [2-dimensional numpy array] Each row is an observation vector.
@@ -149,7 +153,7 @@ class sequentialFilterProc :
         :param dt: [double] integration time step.
         :param rel_tol: [double] relative tolerance of the integrator.
         :param abs_tol: [double] absolute tolerance of the integrator.
-        :param Q: [2-dimensional numpy array] Process Noise covariance matrix.
+        :param Q: [2-dimensional numpy array] Process Noise covariance matrix (or Power Spectral Density, depends on the function used).
         :return:
         """
         nmbrObsAtEpoch = np.shape(obs_vector)[1]
@@ -170,6 +174,7 @@ class sequentialFilterProc :
 
         while self.iterate():
             print "Iteration number", self._iteration
+            printing.printProgress(0, nmbrObs, prefix = 'Progress:', suffix = 'Complete', barLength = 50)
             # Integrate the whole batch, if possible
             refTraj = self.integrateAllBatch(self._Xhat_i_1, obs_time_vector, rel_tol, abs_tol, ())
 
@@ -188,6 +193,7 @@ class sequentialFilterProc :
                 self._prefit_res_vec[i,:] = self.getPreFitResidual()
                 self._postfit_res_vec[i,:] = self.getPostFitResidual()
                 self.assignMoreVectors(i) # Save other data here
+                printing.printProgress(i, nmbrObs, prefix = 'Progress:', suffix = 'Complete', barLength = 50)
             # End observation processing
         # End of iterations
 
@@ -356,13 +362,13 @@ class sequentialFilterProc :
         for i in range(0, nmbrObs):
             postfit_obs_i = postfit[:,i]
             postfit_RMS = np.sqrt(np.sum(postfit_obs_i**2)/nmbrTotalObs)
-            plt.plot(obs_time_vec/3600, postfit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(postfit_RMS,4)) + ' ' +  units[i])
+            plt.plot(obs_time_vec, postfit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(postfit_RMS,4)) + ' ' +  units[i])
         plt.axhline(3, color='k',linestyle='--')
         plt.axhline(-3, color='k',linestyle='--')
         plt.legend(prop={'size':8})
-        plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
-        #plt.ylim([-6,6])
-        plt.xlabel('Observation Time $[h]$')
+        plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
+        plt.ylim([-6,6])
+        plt.xlabel('Observation Time $[s]$')
         plt.ylabel('Normalized Post-fit Residuals')
         plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
@@ -390,13 +396,13 @@ class sequentialFilterProc :
         for i in range(0, nmbrObs):
             prefit_obs_i = prefit[:,i]
             prefit_RMS = np.sqrt(np.sum(prefit_obs_i**2)/nmbrTotalObs)
-            plt.plot(obs_time_vec/3600, prefit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(prefit_RMS,4)) + ' ' +  units[i])
+            plt.plot(obs_time_vec, prefit_obs_i/np.sqrt(R_obs_noise[i,i]), '.', color=colors[i], label= labels[i] + ' RMS = ' + str(round(prefit_RMS,4)) + ' ' +  units[i])
         plt.axhline(3, color='k',linestyle='--')
         plt.axhline(-3, color='k',linestyle='--')
         plt.legend(prop={'size':8})
-        plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
-        #plt.ylim([-6,6])
-        plt.xlabel('Observation Time $[h]$')
+        plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
+        plt.ylim([-6,6])
+        plt.xlabel('Observation Time $[s]$')
         plt.ylabel('Normalized Pre-fit Residuals')
         plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
@@ -414,12 +420,12 @@ class sequentialFilterProc :
             subp = int(str(3) + '1' + str(i + 1))
 
             plt.subplot(subp)
-            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
-            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
-            plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
+            plt.plot(obs_time_vec, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.plot(obs_time_vec, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
             plt.ylabel(labels[i])
             #plt.legend(prop={'size':8})
-        plt.xlabel('Observation Time $[h]$')
+        plt.xlabel('Observation Time $[s]$')
         plt.savefig(filename_pos, bbox_inches='tight', dpi=300)
         plt.close()
 
@@ -428,12 +434,12 @@ class sequentialFilterProc :
             subp = int(str(3) + '1' + str(i-3 + 1))
 
             plt.subplot(subp)
-            plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
-            plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
-            plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
+            plt.plot(obs_time_vec, 3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.plot(obs_time_vec, -3*np.abs(np.sqrt(P[:,i,i]))/dividing_factor, '--k')
+            plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
             plt.ylabel(labels[i])
             plt.legend(prop={'size':8})
-        plt.xlabel('Observation Time $[h]$')
+        plt.xlabel('Observation Time $[s]$')
         plt.savefig(filename_vel, bbox_inches='tight', dpi=300)
         plt.close()
 
@@ -443,12 +449,12 @@ class sequentialFilterProc :
                 subp = int(str(nmbrStates-6) + '1' + str(i-6 + 1))
 
                 plt.subplot(subp)
-                plt.plot(obs_time_vec/3600, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
-                plt.plot(obs_time_vec/3600, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
-                plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
+                plt.plot(obs_time_vec, 3*np.abs(np.sqrt(P[:,i,i])), '--k')
+                plt.plot(obs_time_vec, -3*np.abs(np.sqrt(P[:,i,i])), '--k')
+                plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
                 plt.ylabel(labels[i])
                 plt.legend(prop={'size':8})
-            plt.xlabel('Observation Time $[h]$')
+            plt.xlabel('Observation Time $[s]$')
             plt.savefig(filename_rest, bbox_inches='tight', dpi=300)
             plt.close()
 
@@ -462,13 +468,13 @@ class sequentialFilterProc :
         for nmb in state_vec:
             subp = int(str(len(state_vec)) + '1' + str(i + 1))
             plt.subplot(subp)
-            plt.plot(obs_time_vec/3600, self._Xhat_vec[:,nmb], '-b')
-            plt.plot(obs_time_vec/3600, self._Xhat_vec[:,nmb], '.r')
-            plt.xlim([obs_time_vec[0]/3600, obs_time_vec[-1]/3600])
+            plt.plot(obs_time_vec, self._Xhat_vec[:,nmb], '-b')
+            plt.plot(obs_time_vec, self._Xhat_vec[:,nmb], '.r')
+            plt.xlim([obs_time_vec[0], obs_time_vec[-1]])
             plt.ylabel(labels[i])
             #plt.legend(prop={'size':8})
             i += 1
-        plt.xlabel('Observation Time $[h]$')
+        plt.xlabel('Observation Time $[s]$')
         plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
 
